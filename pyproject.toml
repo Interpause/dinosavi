@@ -10,6 +10,7 @@ packages = [{include = "video_cv_project"}]
 python = "^3.10"
 torch = "^1.13.1"
 torchvision = "^0.14.1"
+numpy = "^1.24.2"
 
 [tool.poetry.group.notebook.dependencies]
 ipykernel = "^6.21.2"
@@ -18,11 +19,15 @@ ipywidgets = "^8.0.4"
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
 isort = "^5.12.0"
+pydocstyle = "^6.3.0"
 
 [tool.black]
 
 [tool.isort]
 profile = "black"
+
+[tool.pydocstyle]
+convention = "google"
 
 [build-system]
 requires = ["poetry-core"]

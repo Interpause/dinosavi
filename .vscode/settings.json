@@ -1,4 +1,6 @@
 {
   "isort.importStrategy": "fromEnvironment",
-  "black-formatter.importStrategy": "fromEnvironment"
+  "black-formatter.importStrategy": "fromEnvironment",
+  "autoDocstring.docstringFormat": "google",
+  "python.linting.pydocstyleEnabled": true
 }

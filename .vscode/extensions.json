@@ -1,3 +1,7 @@
 {
-  "recommendations": ["ms-python.black-formatter", "ms-python.isort"]
+  "recommendations": [
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "njpwerner.autodocstring"
+  ]
 }

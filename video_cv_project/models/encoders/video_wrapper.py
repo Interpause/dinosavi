@@ -1,14 +1,14 @@
-"""Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b89c3dbfe7a6683/code/utils/__init__.py#L273."""
+"""TODO: Add module docstring."""
 
 import torch
-from torch import nn
+import torch.nn as nn
 
 
 class VideoWrapper(nn.Module):
     """Wrapper that flattens temporal dimension into batch dimension.
 
-    The wrapper converts NCTHW input to (N*T)CHW to feed to standard image models.
-    Afterwards, the latent maps output by the image model is converted back to NCTHW.
+    The wrapper converts BCTHW input to (B*T)CHW to feed to standard image models.
+    Afterwards, the latent maps output by the image model is converted back to BCTHW.
     """
 
     def __init__(self, model: nn.Module):
@@ -20,19 +20,19 @@ class VideoWrapper(nn.Module):
         super(VideoWrapper, self).__init__()
         self.model = model
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
         Args:
-            x (torch.Tensor): NCTHW input video.
+            x (torch.Tensor): BCTHW input video.
 
         Returns:
-            torch.Tensor: NCTHW output temporal latent maps.
+            torch.Tensor: BCTHW output temporal latent maps.
         """
-        N, C, T, H, W = x.shape
-        # NCTHW -> NTCHW -> (N*T)CHW
-        x = x.permute(0, 2, 1, 3, 4).contiguous().view(-1, C, H, W)
-        y = self.model(x)  # (N*T)CHW latent maps
+        B = x.shape[0]
+        # BCTHW -> BTCHW -> (B*T)CHW
+        x = x.transpose(1, 2).flatten(0, 1)
+        y: torch.Tensor = self.model(x)  # (B*T)CHW latent maps
 
-        # (N*T)CHW -> NTCHW -> NCTHW
-        return y.view(N, T, *y.shape[-3:]).permute(0, 2, 1, 3, 4)
+        # (B*T)CHW -> BTCHW -> BCTHW
+        return y.unflatten(0, (B, -1)).transpose(1, 2)

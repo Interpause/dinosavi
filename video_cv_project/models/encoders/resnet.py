@@ -8,7 +8,7 @@ import logging
 from types import EllipsisType
 from typing import List
 
-from torch import nn
+import torch.nn as nn
 from torchvision.models import get_model
 from torchvision.models.resnet import (
     ResNet18_Weights,
@@ -73,7 +73,7 @@ def create_resnet_encoder(
     delete_layers(model, del_layers + ["fc", "avgpool"])
 
     # As flatten op between fc & avgpool cannot be disabled, override forward pass.
-    def new_forward(self, x):
+    def _forward(self, x):
         # Copied from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py.
         x = self.conv1(x)
         x = self.bn1(x)
@@ -91,6 +91,6 @@ def create_resnet_encoder(
 
         return x
 
-    override_forward(model, new_forward)
+    override_forward(model, _forward)
 
     return VideoWrapper(model)

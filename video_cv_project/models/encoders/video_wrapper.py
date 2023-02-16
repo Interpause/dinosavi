@@ -7,7 +7,8 @@ from torch import nn
 class VideoWrapper(nn.Module):
     """Wrapper that flattens temporal dimension into batch dimension.
 
-    The wrapper converts NCTHW input to (N*T)CHW
+    The wrapper converts NCTHW input to (N*T)CHW to feed to standard image models.
+    Afterwards, the latent maps output by the image model is converted back to NCTHW.
     """
 
     def __init__(self, model: nn.Module):
@@ -23,15 +24,15 @@ class VideoWrapper(nn.Module):
         """Forward pass.
 
         Args:
-            x (torch.Tensor): NCTHW input.
+            x (torch.Tensor): NCTHW input video.
 
         Returns:
-            torch.Tensor: output.
+            torch.Tensor: NCTHW output temporal latent maps.
         """
         N, C, T, H, W = x.shape
         # NCTHW -> NTCHW -> (N*T)CHW
         x = x.permute(0, 2, 1, 3, 4).contiguous().view(-1, C, H, W)
-        m = self.model(x)
+        y = self.model(x)  # (N*T)CHW latent maps
 
-        #
-        return m.view(N, T, *m.shape[-3:]).permute(0, 2, 1, 3, 4)
+        # (N*T)CHW -> NTCHW -> NCTHW
+        return y.view(N, T, *y.shape[-3:]).permute(0, 2, 1, 3, 4)

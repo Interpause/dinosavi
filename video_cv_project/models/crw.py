@@ -1,14 +1,14 @@
 """Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b89c3dbfe7a6683/code/model.py."""
 
 from functools import partial
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from video_cv_project.cfg import BEST_DEVICE, RGB
+from video_cv_project.cfg import BEST_DEVICE, EPS, RGB
 from video_cv_project.models.heads import FCHead
 from video_cv_project.utils import calc_affinity, calc_markov, infer_outdim
 
@@ -43,8 +43,8 @@ class CRW(nn.Module):
         self.feat_dropout = feat_dropout
 
         self.temperature = temperature
-        self.loss = nn.CrossEntropyLoss(reduction="none")
-        self._loss_targets = {}
+        self.xent_loss = nn.CrossEntropyLoss(reduction="none")
+        self._target_cache = {}  # Cache of targets (class ids of nodes).
 
     def _embed_nodes(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Embed image or image patches using encoder to get node features.
@@ -85,6 +85,65 @@ class CRW(nn.Module):
 
         return feats, maps
 
+    def _compute_walks(self, feats: torch.Tensor):
+        """Compute walks (why do they call it walks not paths) between nodes."""
+        B, C, T, N = feats.shape
+
+        # Map of sub-cycle palindromes to Markov matrices and target class ids.
+        # The Markov matrices are BNM and contain the total transition probability
+        # from all initial nodes to all final nodes for that palindrome.
+        walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]] = {}
+
+        calc_stoch = partial(
+            calc_markov,
+            temperature=self.temperature,
+            dropout=self.edge_dropout,
+            do_dropout=self.training,
+        )
+
+        # BTNM affinity matrices for transitions from all N to all M, where N are
+        # nodes at t+0, M are nodes at t+1, and T is from t=0 to t-1.
+        As = calc_affinity(feats)
+
+        # List of BNM Markov matrices at each time step for transitions from all
+        # N to all M in both directions (left & right).
+        right = tuple(calc_stoch(As[:, t]) for t in range(T - 1))
+        left = tuple(calc_stoch(As[:, t].transpose(-1, -2)) for t in range(T - 1))
+
+        # TODO: Can limit min length of sub-cycle palindromes for better training?
+        # Include all sub-cycle palindromes.
+        for i in range(1, T - 1):
+            # List of BNM Markov matrices forming a palindrome, e.g., a->b->a.
+            # NOTE: Original seems to have a bug, a->b->a is skipped. Instead it
+            # starts at a->b->c->b->a. I have opted to keep it in for now.
+            edges = right[: i + 1] + left[i::-1]
+            path = edges[0]
+            for e in edges[1:]:
+                path @= e
+
+            # NOTE: I removed walking to the left since it was marked as "bug" in
+            # the original's argument.py.
+            walks[f"cyc r{i}"] = (path, self._get_target(path))
+
+        return walks
+
+    def _get_target(self, path: torch.Tensor) -> torch.Tensor:
+        B, N, _ = path.shape
+        key = f"{path.device}:B{B}N{N}"
+        if key not in self._target_cache:
+            # Class id assigned to each node & repeated for each batch.
+            # See `self._calc_loss` for clarification.
+            self._target_cache[key] = torch.arange(N).repeat(B).to(path.device)
+        return self._target_cache[key]
+
+    def _calc_loss(self, path: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        # BNM -> (B*N)M
+        logits = torch.log(path + EPS).flatten(0, 1)
+        # Target is the class id of each node (i.e., 0, 1, 2, ...).
+        # Probability distribution of M should match one-hot encoding of class id.
+        loss = self.xent_loss(logits, target)
+        return logits, loss
+
     def forward(self, x: torch.Tensor, just_feats: bool = False):
         # Input is BT(N*C)HW where:
         #   - N=1: Batch of images.
@@ -97,17 +156,17 @@ class CRW(nn.Module):
 
         # TODO: return feats at this stage if just_feats is True.
 
-        # Compute walks (why do they call it walks not paths) between nodes.
-        walks = {}
-        calc_stoch = partial(
-            calc_markov,
-            temperature=self.temperature,
-            dropout=self.edge_dropout,
-            do_dropout=self.training,
-        )
-        # BTNM, where N are nodes at t+0, M are nodes at t+1, and T is from t=0 to t-1.
-        As = calc_affinity(feats)
-        forward = [calc_stoch(As[:, t]) for t in range(T - 1)]
-        back = [calc_stoch(As[:, t].transpose(-1, -2)) for t in range(T - 1)]
+        walks = self._compute_walks(feats)
 
-        return x
+        losses = [torch.zeros(1).to(x.device)]
+        debug = {}
+
+        for name, (path, target) in walks.items():
+            logits, loss = self._calc_loss(path, target)
+            losses.append(loss)
+            acc = (logits.argmax(-1) == target).float().mean()
+            debug[f"{N} nodes {name} loss"] = float(loss)
+            debug[f"{N} nodes {name} acc"] = float(acc)
+
+        loss = sum(losses) / max(1, len(losses) - 1)
+        return feats, loss, debug

@@ -34,8 +34,8 @@ def calc_affinity(feats: torch.Tensor) -> torch.Tensor:
         torch.Tensor: BTNM node affinity matrices.
     """
     t0, t1 = feats[:, :, :-1], feats[:, :, 1:]
-    A = torch.einsum("bctn,bctm->btnm", t0, t1)  # From t=0 to t-1.
-    return A
+    affinity = torch.einsum("bctn,bctm->btnm", t0, t1)  # From t=0 to t-1.
+    return affinity
 
 
 def calc_markov(

@@ -23,10 +23,7 @@ class FCHead(nn.Module):
         self.depth = depth
 
         dims = [in_feats] * depth + [out_feats]
-        self.layers = nn.ModuleList()
-        for i, o in zip(dims, dims[1:]):
-            l = nn.Linear(i, o)
-            self.layers += [l, nn.ReLU()]
+        self.layers = nn.ModuleList(nn.Linear(i, o) for i, o in zip(dims, dims[1:]))
 
     def forward(self, x: torch.Tensor):
         """Forward pass.
@@ -38,6 +35,5 @@ class FCHead(nn.Module):
             torch.Tensor: Output tensor.
         """
         for l in self.layers:
-            x = l(x)
-        x = F.normalize(x, p=2, dim=1)  # Euclidean norm.
-        return x
+            x = F.relu(l(x))
+        return F.normalize(x, p=2, dim=1)  # Euclidean norm.

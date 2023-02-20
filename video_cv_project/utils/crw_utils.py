@@ -19,7 +19,7 @@ def zero_out_diag(x: torch.Tensor):
     return torch.einsum("...xy,xy->...xy", x, mask)
 
 
-def calc_affinity(feats: torch.Tensor) -> torch.Tensor:
+def calc_affinity(feats: torch.Tensor):
     """Calculate affinity matrices between each node and its neighbors for each time step.
 
     The output is BTNM node affinities where N are nodes at t+0, M are nodes at
@@ -34,8 +34,7 @@ def calc_affinity(feats: torch.Tensor) -> torch.Tensor:
         torch.Tensor: BTNM node affinity matrices.
     """
     t0, t1 = feats[:, :, :-1], feats[:, :, 1:]
-    affinity = torch.einsum("bctn,bctm->btnm", t0, t1)  # From t=0 to t-1.
-    return affinity
+    return torch.einsum("bctn,bctm->btnm", t0, t1)  # From t=0 to t-1.
 
 
 def calc_markov(
@@ -44,7 +43,7 @@ def calc_markov(
     dropout: float = 0.0,
     do_dropout: bool = False,
     zero_diag: bool = False,
-) -> torch.Tensor:
+):
     """Calculate Markov matrix from affinity matrix.
 
     Args:

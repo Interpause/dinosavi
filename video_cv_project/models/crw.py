@@ -31,7 +31,7 @@ class CRW(nn.Module):
         """Create Contrastive Random Walk model.
 
         Args:
-            encoder (nn.Module): Model to use for encoding image patches.
+            encoder (torch.nn.Module): Model to use for encoding image patches.
             edge_dropout (float, optional): Dropout applied to edges in walk. Defaults to 0.0.
             feat_dropout (float, optional): Dropout applied to latent map from encoder. Defaults to 0.0.
             temperature (float, optional): Temperature of softmax. Defaults to 0.07.
@@ -53,7 +53,10 @@ class CRW(nn.Module):
         self.feat_dropout = feat_dropout
 
         self.temperature = temperature
-        self._target_cache = {}  # Cache of node class ids for cross-entropy loss.
+        # Cache of node class ids for cross-entropy loss.
+        self._target_cache: Dict[str, torch.Tensor] = {}
+
+        self.to(device)
 
     def _embed_nodes(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Embed image or image patches using encoder to get node features.
@@ -70,6 +73,7 @@ class CRW(nn.Module):
                 maps: BNCTHW latent maps of nodes.
         """
         B, N = x.shape[:2]
+        feats: torch.Tensor
         # BNCTHW -> (B*N)CTHW
         maps: torch.Tensor = self.encoder(x.flatten(0, 1))
         maps = F.dropout(maps, p=self.feat_dropout, training=self.training)
@@ -86,7 +90,7 @@ class CRW(nn.Module):
             # Pool latent maps: (B*N)CTHW -> (B*N)CT
             feats = maps.sum((-1, -2)) / np.prod(maps.shape[-2:])
 
-        feats: torch.Tensor = self.head(feats.transpose(-1, -2)).transpose(-1, -2)
+        feats = self.head(feats.transpose(-1, -2)).transpose(-1, -2)
         # (B*N)CT -> BNCT -> BCTN
         feats = feats.unflatten(0, (B, -1)).permute(0, 2, 3, 1)
         # (B*N)CTHW -> BNCTHW
@@ -94,9 +98,7 @@ class CRW(nn.Module):
 
         return feats, maps
 
-    def _compute_walks(
-        self, feats: torch.Tensor
-    ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
+    def _compute_walks(self, feats: torch.Tensor):
         """Compute walks between nodes.
 
         Args:
@@ -146,7 +148,7 @@ class CRW(nn.Module):
 
         return walks
 
-    def _get_target(self, path: torch.Tensor) -> torch.Tensor:
+    def _get_target(self, path: torch.Tensor):
         """Create & cache target class ids for cross-entropy loss.
 
         Class ids are assigned to each node. For example, if there are 25 patches,
@@ -165,9 +167,7 @@ class CRW(nn.Module):
             self._target_cache[key] = torch.arange(N).repeat(B).to(path.device)
         return self._target_cache[key]
 
-    def _calc_loss(
-        self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]
-    ) -> Tuple[torch.Tensor, dict]:
+    def _calc_loss(self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]):
         """Calculate cross-entropy loss.
 
         For every sub-cycle palindrome, cross-entropy loss is calculated between
@@ -195,7 +195,7 @@ class CRW(nn.Module):
                 "patches": path.shape[1],
             }
 
-        return sum(losses) / len(losses), debug
+        return torch.stack(losses).mean(), debug
 
     def forward(self, x: torch.Tensor, feats_only: bool = False):
         """Forward pass.
@@ -205,7 +205,7 @@ class CRW(nn.Module):
             feats_only (bool, optional): Return BCTN node features only. Defaults to False.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor, dict]: BCTN node features, loss, and debug info.
+            Tensor | Tuple[torch.Tensor, torch.Tensor, dict]: BCTN node features, loss, and debug info.
         """
         # Input is BT(N*C)HW where:
         #   - N=1: Batch of images.

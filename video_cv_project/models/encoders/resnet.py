@@ -6,7 +6,7 @@ Attributes:
 
 import logging
 from types import EllipsisType
-from typing import List
+from typing import Sequence
 
 import torch.nn as nn
 from torchvision.models import get_model
@@ -36,7 +36,7 @@ SUPPORTED_RESNET_VARIANTS = {
 def create_resnet_encoder(
     name: str = "resnet18",
     weights: str | EllipsisType | None = ...,
-    del_layers: List[str] = [],
+    del_layers: Sequence[str] = [],
     **kwargs,
 ) -> nn.Module:
     """Creates ResNet model and modifies it to act as an encoder.
@@ -50,7 +50,7 @@ def create_resnet_encoder(
     Args:
         name (str, optional): ResNet model to use. Defaults to "resnet18".
         weights (str | Ellipsis | None, optional): Model weights to use. Defaults to ``...``.
-        del_layers (List[str], optional): Additional layers to delete. Defaults to [].
+        del_layers (Sequence[str], optional): Additional layers to delete. Defaults to [].
         **kwargs: Additional arguments to pass to `torchvision.models.get_model`.
 
     Returns:
@@ -70,7 +70,7 @@ def create_resnet_encoder(
             if isinstance(m, nn.Conv2d):
                 m.stride = tuple(1 for _ in m.stride)
 
-    delete_layers(model, del_layers + ["fc", "avgpool"])
+    delete_layers(model, [*del_layers, "fc", "avgpool"])
 
     # As flatten op between fc & avgpool cannot be disabled, override forward pass.
     def _forward(self, x):

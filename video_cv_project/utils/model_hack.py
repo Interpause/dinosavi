@@ -1,6 +1,6 @@
 """TODO: Add module docstring."""
 
-from typing import Callable, List, Tuple, TypeVar
+from typing import Callable, Sequence, TypeVar
 
 import torch
 import torch.nn as nn
@@ -12,12 +12,12 @@ __all__ = ["find_layers", "delete_layers", "override_forward", "infer_outdim"]
 Self = TypeVar("Self")
 
 
-def find_layers(model: nn.Module, names: List[str]):
+def find_layers(model: nn.Module, names: Sequence[str]):
     """Find and return layers by name from model.
 
     Args:
         model (torch.nn.Module): Model to search.
-        names (List[str]): Names of layers to find.
+        names (Sequence[str]): Names of layers to find.
 
     Returns:
         list: Layers found.
@@ -25,12 +25,12 @@ def find_layers(model: nn.Module, names: List[str]):
     return [getattr(model, l) for l in names if hasattr(model, l)]
 
 
-def delete_layers(model: nn.Module, names: List[str]):
+def delete_layers(model: nn.Module, names: Sequence[str]):
     """Convert layers to `torch.nn.Identity` by name in model in place.
 
     Args:
         model (torch.nn.Module): Model to modify.
-        names (List[str]): Names of layers to delete.
+        names (Sequence[str]): Names of layers to delete.
     """
     for l in names:
         if hasattr(model, l):
@@ -50,12 +50,12 @@ def override_forward(
     setattr(model, "forward", bound_method)
 
 
-def infer_outdim(model: nn.Module, indim: Tuple[int], device=BEST_DEVICE):
+def infer_outdim(model: nn.Module, indim: Sequence[int], device=BEST_DEVICE):
     """Infer output dimension of model.
 
     Args:
         model (torch.nn.Module): Model to check.
-        indim (Tuple[int]): Input dimension.
+        indim (Sequence[int]): Input dimension.
         device (torch.device, optional): Device to use. Defaults to best available.
 
     Returns:

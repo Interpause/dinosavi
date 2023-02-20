@@ -42,7 +42,7 @@ def calc_markov(
     affinity: torch.Tensor,
     temperature: float = 0.07,
     dropout: float = 0.0,
-    do_dropout=False,
+    do_dropout: bool = False,
     zero_diag: bool = False,
 ) -> torch.Tensor:
     """Calculate Markov matrix from affinity matrix.

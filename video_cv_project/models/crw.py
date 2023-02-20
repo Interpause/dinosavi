@@ -28,6 +28,16 @@ class CRW(nn.Module):
         head_depth: int = 1,
         device=BEST_DEVICE,
     ):
+        """Create Contrastive Random Walk model.
+
+        Args:
+            encoder (nn.Module): Model to use for encoding image patches.
+            edge_dropout (float, optional): Dropout applied to edges in walk. Defaults to 0.0.
+            feat_dropout (float, optional): Dropout applied to latent map from encoder. Defaults to 0.0.
+            temperature (float, optional): Temperature of softmax. Defaults to 0.07.
+            head_depth (int, optional): Number of layers for FC head. Defaults to 1.
+            device (torch.device, optional): Which device to use. Defaults to BEST_DEVICE.
+        """
         super(CRW, self).__init__()
 
         # Arbitrary BCTHW input is fine.
@@ -37,14 +47,13 @@ class CRW(nn.Module):
         self.map_scale = _sz // _enc_dim[-1]  # Downscale factor of latent map.
 
         self.encoder = encoder
-        self.head = FCHead(self.enc_channels, 128, head_depth)  # TODO: why 128?
+        self.head = FCHead(self.enc_channels, 128, head_depth)  # 128 seems arbitrary.
 
         self.edge_dropout = edge_dropout
         self.feat_dropout = feat_dropout
 
         self.temperature = temperature
-        self.xent_loss = nn.CrossEntropyLoss(reduction="none")
-        self._target_cache = {}  # Cache of targets (class ids of nodes).
+        self._target_cache = {}  # Cache of node class ids for cross-entropy loss.
 
     def _embed_nodes(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Embed image or image patches using encoder to get node features.
@@ -85,14 +94,24 @@ class CRW(nn.Module):
 
         return feats, maps
 
-    def _compute_walks(self, feats: torch.Tensor):
-        """Compute walks (why do they call it walks not paths) between nodes."""
-        B, C, T, N = feats.shape
+    def _compute_walks(
+        self, feats: torch.Tensor
+    ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
+        """Compute walks between nodes.
 
-        # Map of sub-cycle palindromes to Markov matrices and target class ids.
-        # The Markov matrices are BNM and contain the total transition probability
-        # from all initial nodes to all final nodes for that palindrome.
+        Args:
+            feats (torch.Tensor): BCTN node features.
+
+        Returns:
+            Dict[str, Tuple[torch.Tensor, torch.Tensor]]: Map of sub-cycle palindromes
+            to Markov matrices and target class ids.
+
+            The Markov matrices are BNM and contain the total transition probability
+            from all initial nodes to all final nodes for that palindrome.
+        """
         walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]] = {}
+
+        T = feats.shape[2]
 
         calc_stoch = partial(
             calc_markov,
@@ -128,23 +147,66 @@ class CRW(nn.Module):
         return walks
 
     def _get_target(self, path: torch.Tensor) -> torch.Tensor:
+        """Create & cache target class ids for cross-entropy loss.
+
+        Class ids are assigned to each node. For example, if there are 25 patches,
+        they will be labelled from 0 to 24. This is repeated for each batch, allowing
+        cross-entropy loss to be calculated for the entire batch at once.
+
+        Args:
+            path (torch.Tensor): BNM Markov matrix.
+
+        Returns:
+            torch.Tensor: Suitable target class id based on shape of ``path``.
+        """
         B, N, _ = path.shape
         key = f"{path.device}:B{B}N{N}"
         if key not in self._target_cache:
-            # Class id assigned to each node & repeated for each batch.
-            # See `self._calc_loss` for clarification.
             self._target_cache[key] = torch.arange(N).repeat(B).to(path.device)
         return self._target_cache[key]
 
-    def _calc_loss(self, path: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # BNM -> (B*N)M
-        logits = torch.log(path + EPS).flatten(0, 1)
-        # Target is the class id of each node (i.e., 0, 1, 2, ...).
-        # Probability distribution of M should match one-hot encoding of class id.
-        loss = self.xent_loss(logits, target)
-        return logits, loss
+    def _calc_loss(
+        self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]
+    ) -> Tuple[torch.Tensor, dict]:
+        """Calculate cross-entropy loss.
 
-    def forward(self, x: torch.Tensor, just_feats: bool = False):
+        For every sub-cycle palindrome, cross-entropy loss is calculated between
+        the BNM Markov matrix and the target class ids.
+
+        Args:
+            walks (Dict[str, Tuple[torch.Tensor, torch.Tensor]]): See `self._compute_walks`.
+
+        Returns:
+            Tuple[torch.Tensor, dict]: Loss and debug info.
+        """
+        losses = []
+        debug = {}
+
+        for name, (path, target) in walks.items():
+            # BNM -> (B*N)M
+            logits = torch.log(path + EPS).flatten(0, 1)
+            loss = F.cross_entropy(logits, target)
+            losses.append(loss)
+
+            # TODO: Adding logits to debug might be useful for visualization.
+            debug[name] = {
+                "loss": float(loss),
+                "accuracy": float((logits.argmax(-1) == target).float().mean()),
+                "patches": path.shape[1],
+            }
+
+        return sum(losses) / len(losses), debug
+
+    def forward(self, x: torch.Tensor, feats_only: bool = False):
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): BT(N*C)HW input images or image patches.
+            feats_only (bool, optional): Return BCTN node features only. Defaults to False.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, dict]: BCTN node features, loss, and debug info.
+        """
         # Input is BT(N*C)HW where:
         #   - N=1: Batch of images.
         #   - N>1: Batch of image patches.
@@ -152,21 +214,10 @@ class CRW(nn.Module):
         # BT(N*C)HW -> B(N*C)THW -> BNCTHW
         x = x.transpose(1, 2).unflatten(1, (-1, RGB))
         feats, maps = self._embed_nodes(x)
-        B, C, T, N = feats.shape
 
-        # TODO: return feats at this stage if just_feats is True.
+        if feats_only:
+            return feats
 
         walks = self._compute_walks(feats)
-
-        losses = [torch.zeros(1).to(x.device)]
-        debug = {}
-
-        for name, (path, target) in walks.items():
-            logits, loss = self._calc_loss(path, target)
-            losses.append(loss)
-            acc = (logits.argmax(-1) == target).float().mean()
-            debug[f"{N} nodes {name} loss"] = float(loss)
-            debug[f"{N} nodes {name} acc"] = float(acc)
-
-        loss = sum(losses) / max(1, len(losses) - 1)
+        loss, debug = self._calc_loss(walks)
         return feats, loss, debug

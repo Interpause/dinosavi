@@ -1,0 +1,33 @@
+train_transform:
+  _target_: video_cv_project.data.transform.MapTransform
+  _args_:
+    - _target_: torchvision.transforms.ToPILImage
+    - _target_: torchvision.transforms.Resize
+      size: [256, 256]
+    - _target_: torchvision.transforms.ToTensor
+    - _target_: video_cv_project.data.transform.PatchSplitTransform
+      size: 64
+      stride: 32
+    - _target_: video_cv_project.data.transform.MapTransform
+      _args_:
+        - _target_: torchvision.transforms.ToPILImage
+        - _target_: torchvision.transforms.RandomResizedCrop
+          size: 64
+          scale: [0.8, 0.95]
+          ratio: [1.0, 1.0]
+        - _target_: torchvision.transforms.ToTensor
+        - _target_: torchvision.transforms.Normalize
+          mean: [0.4914, 0.4822, 0.4465]
+          std: [0.2023, 0.1994, 0.2010]
+model:
+  _target_: video_cv_project.models.CRW
+  encoder:
+    _target_: video_cv_project.models.encoders.create_resnet_encoder
+    name: resnet18
+    del_layers:
+      - layer4
+  edge_dropout: 0.1
+  feat_dropout: 0.1
+  temperature: 0.07
+  head_depth: 1
+  num_feats: 128

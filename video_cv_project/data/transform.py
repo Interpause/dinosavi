@@ -1,6 +1,6 @@
 """TODO: Add module docstring."""
 
-from typing import Callable, Tuple
+from typing import Callable, Sequence, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -15,14 +15,15 @@ __all__ = ["create_train_pipeline", "MapTransform", "PatchSplitTransform"]
 
 
 class MapTransform:
-    """Map transform over video or some other NCHW image tensor."""
+    """Map transforms over video or some other NCHW image tensor."""
 
-    def __init__(self, transform: Callable):
+    def __init__(self, *args: Callable):
         """Create MapTransform."""
-        self.transform = transform
+        self.transforms = args
+        self._t = T.Compose(args)
 
     def __call__(self, ims: torch.Tensor):
-        """Apply transform to NCHW tensor.
+        """Apply transforms to NCHW tensor.
 
         Args:
             ims(torch.Tensor): NCHW images.
@@ -30,15 +31,16 @@ class MapTransform:
         Returns:
             torch.Tensor: Transformed NCHW images.
         """
-        return torch.stack([self.transform(im) for im in ims])
+        return torch.stack([self._t(im) for im in ims])
 
     def __repr__(self):
         """Return string representation of class."""
-        repr = self.__class__.__name__ + "("
-        for t in str(self.transform).splitlines():
-            repr += f"\n    {t}"
-        repr += "\n)"
-        return repr
+        display = self.__class__.__name__ + "("
+        for t in self.transforms:
+            for line in repr(t).splitlines():
+                display += f"\n  {line}"
+        display += "\n)"
+        return display
 
 
 class PatchSplitTransform:
@@ -90,8 +92,9 @@ def create_train_pipeline(
     # TODO: Use Hydra config system for deeper configurability?
     # Augmentation transforms before splitting image to patches.
     prepatch_augments = [
-        # T.ToPILImage(),
+        T.ToPILImage(),
         T.Resize((im_size, im_size), interpolation=scaler),
+        T.ToTensor(),
         # T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0),
     ]
     # Augmentation transforms after splitting image to patches.
@@ -107,12 +110,7 @@ def create_train_pipeline(
     ]
 
     return MapTransform(
-        T.Compose(
-            [
-                *prepatch_augments,
-                # T.ToTensor(),  # Needed for patch split.
-                PatchSplitTransform(patch_size, patch_stride),
-                MapTransform(T.Compose([*postpatch_augments])),
-            ]
-        )
+        *prepatch_augments,
+        PatchSplitTransform(patch_size, patch_stride),
+        MapTransform(*postpatch_augments),
     )

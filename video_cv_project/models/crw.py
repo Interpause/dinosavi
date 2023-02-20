@@ -12,6 +12,8 @@ from video_cv_project.cfg import BEST_DEVICE, EPS, RGB
 from video_cv_project.models.heads import FCHead
 from video_cv_project.utils import calc_affinity, calc_markov, infer_outdim
 
+__all__ = ["CRW"]
+
 
 class CRW(nn.Module):
     """Contrastive Random Walk model.
@@ -26,6 +28,7 @@ class CRW(nn.Module):
         feat_dropout: float = 0.0,
         temperature: float = 0.07,
         head_depth: int = 1,
+        num_feats: int = 128,
         device=BEST_DEVICE,
     ):
         """Create Contrastive Random Walk model.
@@ -36,6 +39,7 @@ class CRW(nn.Module):
             feat_dropout (float, optional): Dropout applied to latent map from encoder. Defaults to 0.0.
             temperature (float, optional): Temperature of softmax. Defaults to 0.07.
             head_depth (int, optional): Number of layers for FC head. Defaults to 1.
+            num_feats (int, optional): Embedding dimension of FC head. Defaults to 128.
             device (torch.device, optional): Which device to use. Defaults to BEST_DEVICE.
         """
         super(CRW, self).__init__()
@@ -47,7 +51,7 @@ class CRW(nn.Module):
         self.map_scale = _sz // _enc_dim[-1]  # Downscale factor of latent map.
 
         self.encoder = encoder
-        self.head = FCHead(self.enc_channels, 128, head_depth)  # 128 seems arbitrary.
+        self.head = FCHead(self.enc_channels, num_feats, head_depth)
 
         self.edge_dropout = edge_dropout
         self.feat_dropout = feat_dropout

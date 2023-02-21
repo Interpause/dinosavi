@@ -1,3 +1,8 @@
+# @package _global_
+mode: train
+
+epochs: 5
+
 train_transform:
   _target_: video_cv_project.data.transform.MapTransform
   _args_:
@@ -19,6 +24,7 @@ train_transform:
         - _target_: torchvision.transforms.Normalize
           mean: [0.4914, 0.4822, 0.4465]
           std: [0.2023, 0.1994, 0.2010]
+    - _target_: video_cv_project.data.transform.PatchFlattenTransform
 model:
   _target_: video_cv_project.models.CRW
   encoder:
@@ -31,3 +37,10 @@ model:
   temperature: 0.07
   head_depth: 1
   num_feats: 128
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.0001
+scheduler:
+  _target_: torch.optim.lr_scheduler.MultiStepLR
+  milestones: [10, 20]
+  gamma: 0.1

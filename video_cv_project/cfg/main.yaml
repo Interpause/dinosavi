@@ -1,0 +1,12 @@
+defaults:
+  - _self_
+  - hydra/hydra
+  - mode: help
+
+exp_name: exp
+
+# Path (absolute or relative) to output folder i.e., outputs/exp_2020-01-01_00-00-00.
+resume:
+device: cuda
+
+verbose: [video_cv_project, __main__]

@@ -1,6 +1,6 @@
 """TODO: Add module docstring."""
 
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -8,7 +8,12 @@ import torchvision.transforms as T
 
 from video_cv_project.cfg import RGB, RGB_MEAN, RGB_STD
 
-__all__ = ["create_train_pipeline", "MapTransform", "PatchSplitTransform"]
+__all__ = [
+    "create_train_pipeline",
+    "MapTransform",
+    "PatchSplitTransform",
+    "PatchFlattenTransform",
+]
 
 # TODO: Albumentation superiority:
 # How to apply albumentation on video: https://albumentations.ai/docs/examples/example_multi_target/
@@ -26,7 +31,7 @@ class MapTransform:
         """Apply transforms to NCHW tensor.
 
         Args:
-            ims(torch.Tensor): NCHW images.
+            ims (torch.Tensor): NCHW images.
 
         Returns:
             torch.Tensor: Transformed NCHW images.
@@ -55,8 +60,8 @@ class PatchSplitTransform:
         """Create PatchSplitTransform.
 
         Args:
-            size(int | Tuple[int, int]): Patch size (H, W).
-            stride(int | Tuple[int, int]): Patch stride (H, W).
+            size (int | Tuple[int, int]): Patch size (H, W).
+            stride (int | Tuple[int, int]): Patch stride (H, W).
         """
         self.size = (size, size) if isinstance(size, int) else size
         self.stride = (stride, stride) if isinstance(stride, int) else stride
@@ -65,7 +70,7 @@ class PatchSplitTransform:
         """Split CHW image into patches.
 
         Args:
-            im(torch.Tensor): CHW image.
+            im (torch.Tensor): CHW image.
 
         Returns:
             torch.Tensor: NCHW image patches.
@@ -80,6 +85,25 @@ class PatchSplitTransform:
         return f"{self.__class__.__name__}(size={self.size}, stride={self.stride})"
 
 
+class PatchFlattenTransform:
+    """Flatten NCHW patches to (N*C)HW."""
+
+    def __init__(self):
+        """Create PatchFlattenTransform."""
+        pass
+
+    def __call__(self, x: torch.Tensor):
+        """Flatten NCHW patches to (N*C)HW.
+
+        Args:
+            x (torch.Tensor): NCHW patches.
+
+        Returns:
+            torch.Tensor: (N*C)HW patches.
+        """
+        return x.flatten(0, 1)
+
+
 def create_train_pipeline(
     im_size: int = 256,
     patch_size: int = 64,
@@ -90,6 +114,8 @@ def create_train_pipeline(
     # NOTE: Below augmentations are randomized per video frame. So some augmentations don't make sense.
     # TODO: Figure out how to fix augmentation per video. Might need albumentations.
     # TODO: Use Hydra config system for deeper configurability?
+    # Prepatch & postpatch as two config properties, converting to PIL & back handled by flag to specify requested format.
+
     # Augmentation transforms before splitting image to patches.
     prepatch_augments = [
         T.ToPILImage(),
@@ -113,4 +139,5 @@ def create_train_pipeline(
         *prepatch_augments,
         PatchSplitTransform(patch_size, patch_stride),
         MapTransform(*postpatch_augments),
+        PatchFlattenTransform(),
     )

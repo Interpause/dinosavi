@@ -24,9 +24,9 @@ def collate(batch):
 
 def create_kinetics400_dataloader(transform=None):
     """Create dataloader for Kinetics400 dataset."""
-    cache_path = "datasets/kinetics400.pt"
-    dataset_path = "datasets/kinetics400/"
-    clips_per_video = 4
+    cache_path = "/home/jovyan/downloads/kinetics400.pt"
+    dataset_path = "/home/jovyan/downloads/kinetics400/"
+    clips_per_video = 1
 
     transform = transform if transform else create_train_pipeline()
     rng = torch.manual_seed(42)
@@ -50,7 +50,6 @@ def create_kinetics400_dataloader(transform=None):
         frame_rate=8,
         step_between_clips=8,
         download=True,
-        transform=transform,
         num_workers=16,
         num_download_workers=16,
         output_format="TCHW",
@@ -62,6 +61,8 @@ def create_kinetics400_dataloader(transform=None):
         dataset = torchvision.datasets.Kinetics(**{**kwargs, "download": False})
 
     torch.save(dataset, cache_path)
+    # Don't save transform into cache else loading may fail.
+    dataset.transform = transform
 
     # Carry over for limiting dataset size.
     subset_idx = list(

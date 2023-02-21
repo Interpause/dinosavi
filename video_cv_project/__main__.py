@@ -1,6 +1,7 @@
 """TODO: Add module docstring."""
 
 import logging
+import warnings
 
 import hydra
 from omegaconf import DictConfig
@@ -8,6 +9,8 @@ from omegaconf import DictConfig
 from video_cv_project.utils import get_dirs
 
 log = logging.getLogger(__name__)
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
 @hydra.main(version_base="1.3", config_path="cfg", config_name="main")

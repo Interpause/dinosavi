@@ -72,7 +72,7 @@ def create_kinetics400_dataloader(transform=None):
     sampler = RandomClipSampler(dataset.video_clips.subset(subset_idx), clips_per_video)
     dataloader = DataLoader(
         dataset,
-        batch_size=6,
+        batch_size=64,
         sampler=sampler,
         num_workers=16,
         collate_fn=collate,

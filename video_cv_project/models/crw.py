@@ -1,4 +1,7 @@
-"""Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b89c3dbfe7a6683/code/model.py."""
+"""Contrastive Random Walk Model.
+
+Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b89c3dbfe7a6683/code/model.py.
+"""
 
 from functools import partial
 from typing import Dict, Tuple

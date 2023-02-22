@@ -1,2 +1,4 @@
 # @package _global_
+# Config for help mode.
+
 mode: help

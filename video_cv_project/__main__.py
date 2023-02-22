@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Main entrypoint."""
 
 import logging
 import warnings

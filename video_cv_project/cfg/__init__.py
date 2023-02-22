@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Some constants used throughout the codebase."""
 
 import torch
 

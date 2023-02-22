@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Model training script."""
 
 import logging
 

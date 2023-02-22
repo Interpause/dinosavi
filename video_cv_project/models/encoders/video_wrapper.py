@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Wrapper module that flattens temporal dimension into batch dimension."""
 
 import torch
 import torch.nn as nn

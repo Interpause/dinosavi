@@ -1,3 +1,3 @@
-"""TODO: Add module docstring."""
+"""Data related code such as dataloaders and data pipelines."""
 
 from .kinetics import *

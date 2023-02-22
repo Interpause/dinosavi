@@ -1,3 +1,5 @@
+# Use Rich logger for stdout; Better tracebacks & more pretty.
+
 handlers:
   rich:
     class: rich.logging.RichHandler

@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Kinetics dataloader for unsupervised training."""
 
 import logging
 

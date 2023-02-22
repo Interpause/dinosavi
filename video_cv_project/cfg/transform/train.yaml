@@ -1,3 +1,5 @@
+# Config file for train pipeline.
+
 defaults:
   # Base pipeline config.
   - base

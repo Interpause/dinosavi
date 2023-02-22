@@ -1,27 +1,24 @@
 # @package _global_
+# Config for train mode.
+
 defaults:
   - /transform: train
+  - /model: crw
 
 mode: train
 
 epochs: 5
 
 model:
-  _target_: video_cv_project.models.CRW
-  encoder:
-    _target_: video_cv_project.models.encoders.create_resnet_encoder
-    name: resnet18
-    del_layers:
-      - layer4
   edge_dropout: 0.1
   feat_dropout: 0.1
   temperature: 0.07
-  head_depth: 1
-  num_feats: 128
+
 optimizer:
   _target_: torch.optim.Adam
   lr: 0.0001
+
 scheduler:
   _target_: torch.optim.lr_scheduler.MultiStepLR
-  milestones: [10, 20]
+  milestones: [4, 5]
   gamma: 0.1

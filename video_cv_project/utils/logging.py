@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Utility functions for logging."""
 
 import json
 from pathlib import Path

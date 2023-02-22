@@ -1,3 +1,5 @@
+# Configure Hydra system.
+
 defaults:
   - override job_logging: [default, rich]
 

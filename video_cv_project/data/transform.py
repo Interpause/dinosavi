@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Data transforms."""
 
 from typing import Callable, Sequence, Tuple
 

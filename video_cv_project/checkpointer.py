@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Manages loading & saving model state."""
 
 import logging
 from dataclasses import dataclass

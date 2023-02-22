@@ -1,3 +1,3 @@
-"""TODO: Add module docstring."""
+"""Code for models & model components."""
 
 from .crw import *

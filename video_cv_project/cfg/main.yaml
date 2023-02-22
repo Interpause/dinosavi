@@ -1,3 +1,5 @@
+# Main config file for video_cv_project.
+
 defaults:
   - _self_
   - hydra: custom

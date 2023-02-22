@@ -1,4 +1,4 @@
-"""TODO: Add module docstring."""
+"""Utility functions for modifying models."""
 
 from typing import Callable, Sequence, TypeVar
 

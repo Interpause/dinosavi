@@ -1,0 +1,30 @@
+defaults:
+  # Base pipeline config.
+  - base
+
+# NOTE: Augmentations are random per frame so some don't make sense.
+
+# Interpolation mode for resize operations.
+interpolation:
+  _target_: torchvision.transforms.InterpolationMode
+  _args_: [lanczos]
+
+img_transforms:
+  - _target_: torchvision.transforms.ToPILImage
+  - _target_: torchvision.transforms.Resize
+    size: ${...im_size}
+    interpolation: ${...interpolation}
+  # - _target_: torchvision.transforms.ColorJitter
+  #   brightness: 0.1
+  #   contrast: 0.1
+  #   saturation: 0.1
+  #   hue: 0
+
+patch_transforms:
+  - _target_: torchvision.transforms.ToPILImage
+  # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
+  - _target_: torchvision.transforms.RandomResizedCrop
+    size: ${...patch_size}
+    scale: [0.8, 0.95]
+    ratio: [1.0, 1.0]
+    interpolation: ${...interpolation}

@@ -34,7 +34,8 @@ def train(cfg: DictConfig):
     ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.
 
     log.debug("Create train pipeline.")
-    transform = instantiate(cfg.train_transform)
+    transform = instantiate(cfg.transform.pipeline)
+    log.info(f"Pipeline:\n{transform}")
     log.debug("Create train dataloader.")
     dataloader = create_kinetics400_dataloader(transform)
     log.debug("Create model.")

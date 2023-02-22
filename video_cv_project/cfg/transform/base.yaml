@@ -1,0 +1,17 @@
+im_size: [256, 256]
+do_patches: true
+patch_size: 64
+patch_stride: 32
+
+img_transforms: []
+patch_transforms: []
+
+pipeline:
+  _target_: video_cv_project.data.transform.create_pipeline
+  # rgb_mean: [0.4914, 0.4822, 0.4465]
+  # rgb_std: [0.2023, 0.1994, 0.2010]
+  do_patches: ${..do_patches}
+  patch_size: ${..patch_size}
+  patch_stride: ${..patch_stride}
+  img_transforms: ${..img_transforms}
+  patch_transforms: ${..patch_transforms}

@@ -1,6 +1,6 @@
 """TODO: Add module docstring."""
 
-from typing import Callable, Tuple
+from typing import Callable, Sequence, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -10,12 +10,14 @@ from video_cv_project.cfg import RGB, RGB_MEAN, RGB_STD
 
 __all__ = [
     "create_train_pipeline",
+    "create_pipeline",
     "MapTransform",
     "PatchSplitTransform",
     "PatchFlattenTransform",
 ]
 
-# TODO: Albumentation superiority:
+# NOTE: Augmentations are random per frame so some don't make sense.
+# TODO: Figure out how to fix augmentation per video. Might need albumentations.
 # How to apply albumentation on video: https://albumentations.ai/docs/examples/example_multi_target/
 
 
@@ -103,6 +105,58 @@ class PatchFlattenTransform:
         """
         return x.flatten(0, 1)
 
+    def __repr__(self):
+        """Return string representation of class."""
+        return f"{self.__class__.__name__}()"
+
+
+class _ToTensor:
+    """Unlike `T.ToTensor`, does not error if input is already a tensor."""
+
+    def __init__(self):
+        """Create _ToTensor."""
+        self._t = T.ToTensor()
+
+    def __call__(self, x):
+        """Convert to tensor if necessary.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Tensor.
+        """
+        return x if isinstance(x, torch.Tensor) else self._t(x)
+
+    def __repr__(self):
+        """Return string representation of class."""
+        return f"{self.__class__.__name__}()"
+
+
+def create_pipeline(
+    img_transforms: Sequence[Callable] = [],
+    patch_transforms: Sequence[Callable] = [],
+    rgb_mean: Sequence[float] = RGB_MEAN,
+    rgb_std: Sequence[float] = RGB_STD,
+    do_patches: bool = True,
+    patch_size: int = 64,
+    patch_stride: int = 32,
+):
+    """Create pipeline for training or inference.
+
+    Intended for use with Hydra config system.
+    """
+    rgb_norm = T.Normalize(mean=rgb_mean, std=rgb_std)
+    if not do_patches:
+        return MapTransform(*img_transforms, _ToTensor(), rgb_norm)
+    return MapTransform(
+        *img_transforms,
+        _ToTensor(),
+        PatchSplitTransform(patch_size, patch_stride),
+        MapTransform(*patch_transforms, _ToTensor(), rgb_norm),
+        PatchFlattenTransform(),
+    )
+
 
 def create_train_pipeline(
     im_size: int = 256,
@@ -111,20 +165,17 @@ def create_train_pipeline(
 ):
     """Create training pipeline."""
     scaler = T.InterpolationMode.LANCZOS
-    # NOTE: Below augmentations are randomized per video frame. So some augmentations don't make sense.
-    # TODO: Figure out how to fix augmentation per video. Might need albumentations.
-    # TODO: Use Hydra config system for deeper configurability?
-    # Prepatch & postpatch as two config properties, converting to PIL & back handled by flag to specify requested format.
 
     # Augmentation transforms before splitting image to patches.
-    prepatch_augments = [
+    img_augments = [
         T.ToPILImage(),
         T.Resize((im_size, im_size), interpolation=scaler),
         T.ToTensor(),
         # T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0),
     ]
+
     # Augmentation transforms after splitting image to patches.
-    postpatch_augments = [
+    patch_augments = [
         T.ToPILImage(),
         # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
         T.RandomResizedCrop(
@@ -136,8 +187,8 @@ def create_train_pipeline(
     ]
 
     return MapTransform(
-        *prepatch_augments,
+        *img_augments,
         PatchSplitTransform(patch_size, patch_stride),
-        MapTransform(*postpatch_augments),
+        MapTransform(*patch_augments),
         PatchFlattenTransform(),
     )

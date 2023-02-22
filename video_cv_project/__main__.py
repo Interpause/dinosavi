@@ -8,7 +8,7 @@ from omegaconf import DictConfig
 
 from video_cv_project.utils import get_dirs
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("video_cv_project")
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -23,12 +23,18 @@ def main(cfg: DictConfig):
     log.info(f"Output Directory: {out_dir}")
     log.debug(f"Full Config:\n{cfg}")
 
-    if cfg.mode == "train":
-        from video_cv_project.train import train
+    try:
+        if cfg.mode == "train":
+            from video_cv_project.train import train
 
-        train(cfg)
-    elif cfg.mode == "help":
-        log.critical("Add `--help` for help message.")
+            train(cfg)
+        elif cfg.mode == "help":
+            log.critical("Add `--help` for help message.")
+    except KeyboardInterrupt:
+        log.warning("Exiting due to Keyboard Interrupt.")
+    except Exception as e:
+        log.critical("Exiting due to error.", exc_info=e)
+        raise e
 
 
 if __name__ == "__main__":

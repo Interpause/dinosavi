@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - hydra/hydra
+  - hydra: custom
   - mode: help
 
 exp_name: exp
@@ -9,4 +9,4 @@ exp_name: exp
 resume:
 device: cuda
 
-verbose: [video_cv_project, __main__]
+verbose: [video_cv_project]

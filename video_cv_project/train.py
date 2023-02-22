@@ -18,9 +18,11 @@ CKPT_EXT = ".ckpt"
 LATEST_NAME = f"latest{CKPT_EXT}"
 MODEL_NAME = f"epoch%d{CKPT_EXT}"
 SAMPLE_INPUT = [1, 8, 147, 64, 64]
+LOG_EVERY = 10
 
 # TODO: Do smth with debug data like visualize.
-# TODO: Tensorboard.
+# TODO: Tensorboard. Other per iteration logging (maybe epoch logging too?) should
+# be handled by custom iterator.
 # TODO: More metadata about input mode like patch size, number of patches, shape, etc.
 # TODO: Distributed training wait who am i kidding.
 
@@ -47,7 +49,6 @@ def train(cfg: DictConfig):
     # TODO: Should load config from yaml log, not ckpt + do this in main() instead.
     if cfg.resume:
         resume_ckpt = root_dir / cfg.resume / CKPT_FOLDER / LATEST_NAME
-        log.info(f"Load previous checkpoint: {resume_ckpt}")
         checkpointer.load(resume_ckpt)
         cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
@@ -65,10 +66,10 @@ def train(cfg: DictConfig):
         epochtask = iter_pbar.add_task("Epoch", total=cfg.epochs, status="")
 
         for i in range(cfg.epochs):
-            log.info(f"Epoch: {i + 1}/{cfg.epochs}")
+            log.info(f"Epoch: {i+1}/{cfg.epochs}")
             itertask = iter_pbar.add_task("Iteration", total=len(dataloader), status="")
 
-            for batch in dataloader:
+            for n, batch in enumerate(dataloader, start=1):
                 batch = batch.to(device)
 
                 _, loss, debug = model(batch)
@@ -79,6 +80,9 @@ def train(cfg: DictConfig):
 
                 status = f"Loss: {loss:.6g}, LR: {optimizer.param_groups[0]['lr']:.3g}"
                 iter_pbar.update(itertask, advance=1, status=status)
+
+                if n % LOG_EVERY == 0 or n == len(dataloader):
+                    log.info(f"Iteration: {n}/{len(dataloader)}, {status}")
 
             scheduler.step()
             checkpointer.epoch += 1

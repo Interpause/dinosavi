@@ -4,6 +4,9 @@ defaults:
   # Base pipeline config.
   - base
 
+do_patches: true
+im_size: [256, 256]
+
 # NOTE: Augmentations are random per frame so some don't make sense.
 
 # Interpolation mode for resize operations.
@@ -11,7 +14,7 @@ interpolation:
   _target_: torchvision.transforms.InterpolationMode
   _args_: [lanczos]
 
-img_transforms:
+im_transforms:
   - _target_: torchvision.transforms.ToPILImage
   - _target_: torchvision.transforms.Resize
     size: ${...im_size}

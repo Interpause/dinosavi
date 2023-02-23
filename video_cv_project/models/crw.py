@@ -22,6 +22,11 @@ class CRW(nn.Module):
     """Contrastive Random Walk model.
 
     TODO: How to cite paper in a docstring? https://ajabri.github.io/videowalk/
+    NOTE: While it is called a model, Contrastive Random Walk is more similar in
+    nature to a training technique than a model. In essence, this class is more
+    of a trainer that wraps over the encoder being trained. Which is why loss calculation
+    is done within the model itself, and in downstream tasks, only the encoder is
+    used.
     """
 
     def __init__(

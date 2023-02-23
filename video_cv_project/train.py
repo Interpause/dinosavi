@@ -41,15 +41,21 @@ def train(cfg: DictConfig):
     log.debug("Create model.")
     model = instantiate(cfg.model)
     log.debug("Create optimizer.")
-    optimizer = instantiate(cfg.optimizer, model.parameters())
+    optimizer = instantiate(cfg.train.optimizer, model.parameters())
     log.debug("Create scheduler.")
-    scheduler = instantiate(cfg.scheduler, optimizer)
+    scheduler = instantiate(cfg.train.scheduler, optimizer)
 
-    checkpointer = Checkpointer(model, optimizer, scheduler, 0, dict(cfg))
+    checkpointer = Checkpointer(
+        model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        cfg=OmegaConf.to_container(cfg),  # type: ignore
+    )
 
-    # TODO: Should load config from yaml log, not ckpt + do this in main() instead.
+    # TODO: What should be preserved/overwritten when resuming train?
+    # Or some system to specify that?
     if cfg.resume:
-        resume_ckpt = root_dir / cfg.resume / CKPT_FOLDER / LATEST_NAME
+        resume_ckpt = root_dir / cfg.resume
         checkpointer.load(resume_ckpt)
         cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")

@@ -1,6 +1,6 @@
 """Data transforms."""
 
-from typing import Callable, Sequence, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -134,48 +134,52 @@ class _ToTensor:
 
 
 def create_pipeline(
-    img_transforms: Sequence[Callable] = [],
+    im_transforms: Sequence[Callable] = [],
     patch_transforms: Sequence[Callable] = [],
+    do_rgb_norm: bool = True,
     rgb_mean: Sequence[float] = RGB_MEAN,
     rgb_std: Sequence[float] = RGB_STD,
-    do_patches: bool = True,
-    patch_size: int = 64,
-    patch_stride: int = 32,
+    do_patches: bool = False,
+    patch_size: int | Tuple[int, int] = 64,
+    patch_stride: int | Tuple[int, int] = 32,
 ):
     """Create pipeline for training or inference.
 
     Intended for use with Hydra config system.
     """
     rgb_norm = T.Normalize(mean=rgb_mean, std=rgb_std)
-    if not do_patches:
-        return MapTransform(*img_transforms, _ToTensor(), rgb_norm)
-    return MapTransform(
-        *img_transforms,
-        _ToTensor(),
-        PatchSplitTransform(patch_size, patch_stride),
-        MapTransform(*patch_transforms, _ToTensor(), rgb_norm),
-        PatchFlattenTransform(),
-    )
+    im: List[Callable] = [*im_transforms, _ToTensor()]
+    if do_patches:
+        patch: List[Callable] = [*patch_transforms, _ToTensor()]
+        patch += [rgb_norm] if do_rgb_norm else []
+        im += [
+            PatchSplitTransform(patch_size, patch_stride),
+            MapTransform(*patch),
+            PatchFlattenTransform(),
+        ]
+    else:
+        im += [rgb_norm] if do_rgb_norm else []
+    return MapTransform(*im)
 
 
 def create_train_pipeline(
-    im_size: int = 256,
-    patch_size: int = 64,
-    patch_stride: int = 32,
+    im_size: Tuple[int, int] = (256, 256),
+    patch_size: int | Tuple[int, int] = 64,
+    patch_stride: int | Tuple[int, int] = 32,
 ):
     """Create training pipeline."""
     scaler = T.InterpolationMode.LANCZOS
 
     # Augmentation transforms before splitting image to patches.
-    img_augments = [
+    im_transforms = [
         T.ToPILImage(),
-        T.Resize((im_size, im_size), interpolation=scaler),
+        T.Resize(im_size, interpolation=scaler),
         T.ToTensor(),
         # T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0),
     ]
 
     # Augmentation transforms after splitting image to patches.
-    patch_augments = [
+    patch_transforms = [
         T.ToPILImage(),
         # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
         T.RandomResizedCrop(
@@ -187,8 +191,8 @@ def create_train_pipeline(
     ]
 
     return MapTransform(
-        *img_augments,
+        *im_transforms,
         PatchSplitTransform(patch_size, patch_stride),
-        MapTransform(*patch_augments),
+        MapTransform(*patch_transforms),
         PatchFlattenTransform(),
     )

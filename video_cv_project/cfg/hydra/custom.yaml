@@ -5,7 +5,7 @@ defaults:
 
 job:
   name: ${exp_name}
-  chdir: True
+  chdir: true
 run:
   dir: outputs/${hydra.job.name}_${now:%Y-%m-%d_%H-%M-%S}
 sweep:

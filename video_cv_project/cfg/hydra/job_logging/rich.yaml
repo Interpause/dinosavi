@@ -3,6 +3,6 @@
 handlers:
   rich:
     class: rich.logging.RichHandler
-    rich_tracebacks: True
+    rich_tracebacks: true
 root:
   handlers: [rich, file]

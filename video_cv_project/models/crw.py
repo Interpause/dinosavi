@@ -27,6 +27,15 @@ class CRW(nn.Module):
     of a trainer that wraps over the encoder being trained. Which is why loss calculation
     is done within the model itself, and in downstream tasks, only the encoder is
     used.
+
+    Attributes:
+        encoder (torch.nn.Module): Encoder for image patches.
+        head (torch.nn.Module): Head to get node features from encoder latent map.
+        edge_dropout (float): Dropout applied to edges in walk.
+        feat_dropout (float): Dropout applied to latent map from encoder.
+        temperature (float): Temperature of softmax.
+        enc_channels (int): Number of channels in latent map from encoder.
+        map_scale (int): Downscale factor of latent map.
     """
 
     def __init__(
@@ -70,7 +79,7 @@ class CRW(nn.Module):
 
         self.to(device)
 
-    def _embed_nodes(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _embed_nodes(self, x: torch.Tensor) -> torch.Tensor:
         """Embed image or image patches using encoder to get node features.
 
         Whether the input is a list of images or image patches is detected by whether
@@ -80,9 +89,7 @@ class CRW(nn.Module):
             x (torch.Tensor): BNCTHW images or image patches.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]:
-                feats: BCTN node features.
-                maps: BNCTHW latent maps of nodes.
+            torch.Tensor: BCTN node features.
         """
         B, N = x.shape[:2]
         feats: torch.Tensor
@@ -94,8 +101,6 @@ class CRW(nn.Module):
         if N == 1:
             # (B*N)CTHW -> (B*N)HWCT -> (B*N*H*W)CT -> (B*N)CT
             feats = maps.permute(0, 3, 4, 1, 2).flatten(0, 2)
-            # Feature map shared by all nodes: (B*N)CT -> (B*N)CTHW
-            maps = feats.reshape(*feats.shape, 1, 1)
 
         # Each node has its own latent map.
         else:
@@ -104,11 +109,7 @@ class CRW(nn.Module):
 
         feats = self.head(feats.transpose(-1, -2)).transpose(-1, -2)
         # (B*N)CT -> BNCT -> BCTN
-        feats = feats.unflatten(0, (B, -1)).permute(0, 2, 3, 1)
-        # (B*N)CTHW -> BNCTHW
-        maps = maps.unflatten(0, (B, -1))
-
-        return feats, maps
+        return feats.unflatten(0, (B, -1)).permute(0, 2, 3, 1)
 
     def _compute_walks(self, feats: torch.Tensor):
         """Compute walks between nodes.
@@ -176,7 +177,7 @@ class CRW(nn.Module):
         B, N, _ = path.shape
         key = f"{path.device}:B{B}N{N}"
         if key not in self._target_cache:
-            self._target_cache[key] = torch.arange(N).repeat(B).to(path.device)
+            self._target_cache[key] = torch.arange(N).expand(B).to(path.device)
         return self._target_cache[key]
 
     def _calc_loss(self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]):
@@ -209,15 +210,14 @@ class CRW(nn.Module):
 
         return torch.stack(losses).mean(), debug
 
-    def forward(self, x: torch.Tensor, feats_only: bool = False):
+    def forward(self, x: torch.Tensor):
         """Forward pass.
 
         Args:
             x (torch.Tensor): BT(N*C)HW input images or image patches.
-            feats_only (bool, optional): Return BCTN node features only. Defaults to False.
 
         Returns:
-            Tensor | Tuple[torch.Tensor, torch.Tensor, dict]: BCTN node features, loss, and debug info.
+            Tuple[torch.Tensor, torch.Tensor, dict]: BCTN node features, loss, and debug info.
         """
         # Input is BT(N*C)HW where:
         #   - N=1: Batch of images.
@@ -225,11 +225,7 @@ class CRW(nn.Module):
 
         # BT(N*C)HW -> B(N*C)THW -> BNCTHW
         x = x.transpose(1, 2).unflatten(1, (-1, RGB))
-        feats, maps = self._embed_nodes(x)
-
-        if feats_only:
-            return feats
-
+        feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks)
         return feats, loss, debug

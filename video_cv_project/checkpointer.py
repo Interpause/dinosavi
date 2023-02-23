@@ -61,7 +61,7 @@ class Checkpointer:
         """Load state in place."""
         if not self.quiet:
             log.info(f"Loading checkpoint: {path}")
-        ckpt = torch.load(path)
+        ckpt = torch.load(path, map_location="cpu")
         self._load(ckpt)
         self.prev_ckpt = ckpt
 

@@ -3,7 +3,7 @@
 defaults:
   - _self_
   - hydra: custom
-  - transform: base
+  - transform:
   - model: crw
   - mode: help
 
@@ -12,6 +12,6 @@ exp_name: exp
 # Path (absolute or relative) to the model.
 # For example: outputs/exp_2020-01-01_00-00-00/weights/latest.ckpt
 resume:
-device: cuda
+device:
 
 verbose: [video_cv_project]

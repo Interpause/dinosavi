@@ -7,6 +7,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from torchinfo import summary
 
+from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.checkpointer import Checkpointer
 from video_cv_project.data import create_kinetics400_dataloader
 from video_cv_project.utils import get_dirs, iter_pbar
@@ -65,7 +66,8 @@ def train(cfg: DictConfig):
     model_summary.formatting.layer_name_width = 30
     log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
 
-    device = torch.device(cfg.device)
+    device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
+    log.info(f"Torch Device: {device}")
     model.to(device).train()
 
     with iter_pbar:

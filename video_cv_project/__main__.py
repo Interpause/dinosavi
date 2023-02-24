@@ -28,8 +28,14 @@ def main(cfg: DictConfig):
             from video_cv_project.train import train
 
             train(cfg)
+        elif cfg.mode == "eval":
+            from video_cv_project.eval import eval
+
+            eval(cfg)
         elif cfg.mode == "help":
             log.critical("Add `--help` for help message.")
+        else:
+            log.critical(f"Unsupported mode: {cfg.mode}")
     except KeyboardInterrupt:
         log.warning("Exiting due to Keyboard Interrupt.")
     except Exception as e:

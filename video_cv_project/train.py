@@ -63,9 +63,9 @@ def train(cfg: DictConfig):
         checkpointer.load(resume_ckpt)
         cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
-        log.debug(f"Resume Config:\n{cfg}")
+        log.debug(f"Ckpt Config:\n{cfg}")
 
-    model_summary = summary(model, SAMPLE_INPUT, verbose=0, col_width=20)
+    model_summary = summary(model, SAMPLE_INPUT, verbose=0, col_width=20, device=device)
     model_summary.formatting.layer_name_width = 30
     log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
 

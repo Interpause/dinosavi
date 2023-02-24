@@ -2,8 +2,7 @@
 
 import logging
 from math import ceil
-from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 import torch
 import torchvision.transforms as T
@@ -11,9 +10,9 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from torch.utils.data import Dataset
 
-__all__ = ["VOSDataset", "DAVISDataset"]
+__all__ = ["VOSDataset"]
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def load_images(im_paths: Sequence[str], mode: str = "RGB", to_tensor: bool = True):
@@ -25,7 +24,7 @@ def load_images(im_paths: Sequence[str], mode: str = "RGB", to_tensor: bool = Tr
             im = im.convert(mode=mode)
             ims.append(F.to_tensor(im) if to_tensor else im)
         except Exception as e:
-            logger.warning(f"Skipping {path} due to {e}.")
+            log.warning(f"Skipping {path} due to {e}.")
     return ims
 
 
@@ -49,7 +48,8 @@ class VOSDataset(Dataset):
         im_dirs: Sequence[Tuple[str, Sequence[str]]] = [],
         lbl_dirs: Sequence[Tuple[str, Sequence[str]]] = [],
         im_size: int | Tuple[int, int] = -1,
-        map_scale: int = 8,
+        transform: Callable = lambda x: x,
+        map_scale: int = 1,
         context_len: int = 20,
         is_frames: bool = True,
     ):
@@ -61,6 +61,7 @@ class VOSDataset(Dataset):
             if im_size == -1 or isinstance(im_size, tuple)
             else (im_size, im_size)
         )
+        self.transform = transform
         self.map_scale = map_scale  # Downscale labels to encoder's latent map size.
         self.context_len = context_len
         self.is_frames = is_frames
@@ -140,44 +141,10 @@ class VOSDataset(Dataset):
 
             tgts.append(tgt)
 
-        ims = self.repeat_context(ims)
+        ims = self.transform(self.repeat_context(ims))
         tgts = self.repeat_context(tgts)
-
-        return torch.stack(ims), torch.stack(tgts), lbl_cls, meta
+        return ims, torch.stack(tgts), lbl_cls, meta
 
     def __len__(self):
         """Dataset length."""
         return len(self.im_dirs)
-
-
-class DAVISDataset(VOSDataset):
-    """DAVIS Dataset."""
-
-    def __init__(
-        self,
-        davis_dir: str,
-        year: str = "2017",
-        split: str = "val",
-        quality: str = "480p",
-        im_size: int | Tuple[int, int] = -1,
-        map_scale: int = 8,
-        context_len: int = 20,
-    ):
-        """Initialize DAVIS dataset."""
-        im_dirs = []
-        lbl_dirs = []
-
-        root = Path(davis_dir).resolve()
-        imageset_txt = root / "ImageSets" / year / f"{split}.txt"
-        with imageset_txt.open() as f:
-            videos = [l for s in f.readlines() if (l := s.strip()) != ""]
-
-        for video in videos:
-            lbl_dir = root / "Annotations" / quality / video
-            im_dir = root / "JPEGImages" / quality / video
-            im_paths = sorted(im_dir.glob("*.jpg"), key=lambda p: int(p.stem))
-            lbl_paths = sorted(lbl_dir.glob("*.png"), key=lambda p: int(p.stem))
-            im_dirs.append((str(im_dir), [str(p) for p in im_paths]))
-            lbl_dirs.append((str(lbl_dir), [str(p) for p in lbl_paths]))
-
-        super().__init__(im_dirs, lbl_dirs, im_size, map_scale, context_len, True)

@@ -1,0 +1,24 @@
+# Config for DAVIS dataloader.
+
+defaults:
+  - base
+  - override transform: base
+
+mode: davis
+batch_size: 4
+num_workers: 16
+
+dataset:
+  _target_: video_cv_project.data.DAVISDataset
+  root: /home/jovyan/downloads/DAVIS/
+  year: '2017'
+  split: val
+  quality: '480p'
+  im_size: -1
+  context_len: 20
+
+sampler:
+  _target_: torch.utils.data.sampler.SequentialSampler
+
+dataloader:
+  batch_size: 1

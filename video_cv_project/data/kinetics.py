@@ -24,7 +24,7 @@ def collate(batch):
 
 
 def create_kinetics_dataloader(cfg: DictConfig):
-    """Create dataloader for Kinetics400 dataset."""
+    """Create dataloader for Kinetics dataset."""
     rng = torch.manual_seed(42)
 
     meta = None

@@ -42,7 +42,7 @@ class Checkpointer:
             epoch=self.epoch,
             cfg=self.cfg,
         )
-        torch.save(ckpt)
+        torch.save(ckpt, path)
         self.prev_ckpt = ckpt
 
     def _load(self, ckpt):

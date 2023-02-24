@@ -11,15 +11,9 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from torch.utils.data import Dataset
 
-from video_cv_project.cfg import RGB
-
 __all__ = ["VOSDataset", "DAVISDataset"]
 
 logger = logging.getLogger(__name__)
-
-# TODO:
-# - DavisDataset should process folder structure & metadata
-# - VOSDataset gets the alr processed map of sorted video folders to sorted video frames
 
 
 def load_images(im_paths: Sequence[str], mode: str = "RGB", to_tensor: bool = True):
@@ -176,7 +170,7 @@ class DAVISDataset(VOSDataset):
         root = Path(davis_dir).resolve()
         imageset_txt = root / "ImageSets" / year / f"{split}.txt"
         with imageset_txt.open() as f:
-            videos = {l for s in f.readlines() if (l := s.strip()) != ""}
+            videos = [l for s in f.readlines() if (l := s.strip()) != ""]
 
         for video in videos:
             lbl_dir = root / "Annotations" / quality / video

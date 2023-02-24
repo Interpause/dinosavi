@@ -177,7 +177,7 @@ class CRW(nn.Module):
         B, N, _ = path.shape
         key = f"{path.device}:B{B}N{N}"
         if key not in self._target_cache:
-            self._target_cache[key] = torch.arange(N).expand(B).to(path.device)
+            self._target_cache[key] = torch.arange(N).repeat(B).to(path.device)
         return self._target_cache[key]
 
     def _calc_loss(self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]):

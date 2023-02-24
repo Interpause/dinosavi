@@ -9,7 +9,7 @@ from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.checkpointer import Checkpointer
-from video_cv_project.data import create_kinetics400_dataloader
+from video_cv_project.data import create_kinetics_dataloader
 from video_cv_project.utils import get_dirs, iter_pbar
 
 log = logging.getLogger(__name__)
@@ -19,7 +19,6 @@ CKPT_EXT = ".ckpt"
 LATEST_NAME = f"latest{CKPT_EXT}"
 MODEL_NAME = f"epoch%d{CKPT_EXT}"
 SAMPLE_INPUT = [1, 8, 147, 64, 64]
-LOG_EVERY = 10
 
 # TODO: Do smth with debug data like visualize.
 # TODO: Tensorboard. Other per iteration logging (maybe epoch logging too?) should
@@ -34,17 +33,21 @@ def train(cfg: DictConfig):
     ckpt_dir = out_dir / CKPT_FOLDER
     ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.
 
-    log.debug("Create train pipeline.")
-    transform = instantiate(cfg.transform.pipeline)
-    log.info(f"Pipeline:\n{transform}")
-    log.debug("Create train dataloader.")
-    dataloader = create_kinetics400_dataloader(transform)
-    log.debug("Create model.")
+    device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
+    epochs = cfg.train.epochs
+    log_every = cfg.train.log_every
+
+    log.info(f"Torch Device: {device}")
+    log.info(f"Epochs: {epochs}")
+
+    log.debug("Create Model.")
     model = instantiate(cfg.model)
-    log.debug("Create optimizer.")
+    log.debug("Create Optimizer.")
     optimizer = instantiate(cfg.train.optimizer, model.parameters())
-    log.debug("Create scheduler.")
+    log.debug("Create Scheduler.")
     scheduler = instantiate(cfg.train.scheduler, optimizer)
+    log.debug("Create Train Dataloader.")
+    dataloader = create_kinetics_dataloader(cfg)
 
     checkpointer = Checkpointer(
         model=model,
@@ -66,22 +69,18 @@ def train(cfg: DictConfig):
     model_summary.formatting.layer_name_width = 30
     log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
 
-    device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
-    log.info(f"Torch Device: {device}")
     model.to(device).train()
 
     with iter_pbar:
-        log.info(f"Start training for {cfg.epochs} epochs.")
-        epochtask = iter_pbar.add_task("Epoch", total=cfg.epochs, status="")
+        log.info(f"Start training for {epochs} epochs.")
+        epochtask = iter_pbar.add_task("Epoch", total=epochs, status="")
 
-        for i in range(cfg.epochs):
-            log.info(f"Epoch: {i+1}/{cfg.epochs}")
+        for i in range(epochs):
+            log.info(f"Epoch: {i+1}/{epochs}")
             itertask = iter_pbar.add_task("Iteration", total=len(dataloader), status="")
 
-            for n, batch in enumerate(dataloader, start=1):
-                batch = batch.to(device)
-
-                _, loss, debug = model(batch)
+            for n, video in enumerate(dataloader, start=1):
+                _, loss, debug = model(video.to(device))
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -90,7 +89,7 @@ def train(cfg: DictConfig):
                 status = f"Loss: {loss:.6g}, LR: {optimizer.param_groups[0]['lr']:.3g}"
                 iter_pbar.update(itertask, advance=1, status=status)
 
-                if n % LOG_EVERY == 0 or n == len(dataloader):
+                if n % log_every == 0 or n == len(dataloader):
                     log.info(f"Iteration: {n}/{len(dataloader)}, {status}")
 
             scheduler.step()

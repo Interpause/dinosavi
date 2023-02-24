@@ -1,1 +1,27 @@
-# TODO: Config for Kinetics400 dataloader.
+# Config for Kinetics400 dataloader.
+
+defaults:
+  - base
+  - override transform: train
+
+mode: kinetics400
+batch_size: 64
+num_workers: 16
+
+cache_path: /home/jovyan/downloads/kinetics400.pt
+
+dataset:
+  _target_: torchvision.datasets.Kinetics
+  root: /home/jovyan/downloads/kinetics400/
+  frames_per_clip: 4
+  num_classes: '400'
+  split: val
+  frame_rate: 8
+  step_between_clips: 8
+  num_workers: ${..num_workers}
+  num_download_workers: ${..num_workers}
+  output_format: TCHW
+
+sampler:
+  _target_: torchvision.datasets.samplers.RandomClipSampler
+  max_clips_per_video: 1

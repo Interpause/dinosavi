@@ -2,12 +2,14 @@
 # Config for train mode.
 
 defaults:
-  - override /transform: train
+  - override /data: kinetics400
 
 mode: train
 
 train:
   epochs: 5
+
+  log_every: 10
 
   optimizer:
     _target_: torch.optim.Adam

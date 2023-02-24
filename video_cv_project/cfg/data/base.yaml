@@ -1,0 +1,14 @@
+# Base config for dataloaders.
+defaults:
+  - transform:
+
+mode:
+batch_size: 1
+num_workers: 0
+
+# NOTE: dataset, sampler & generator is populated at runtime.
+dataloader:
+  _target_: torch.utils.data.DataLoader
+  batch_size: ${..batch_size}
+  num_workers: ${..num_workers}
+  pin_memory: true

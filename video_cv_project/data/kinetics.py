@@ -3,13 +3,14 @@
 import logging
 
 import torch
-import torchvision
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader, default_collate
-from torchvision.datasets.samplers import RandomClipSampler
+from torchvision.datasets import Kinetics
 
 from video_cv_project.data.transform import create_train_pipeline
 
-__all__ = ["create_kinetics400_dataloader"]
+__all__ = ["create_kinetics_dataloader"]
 
 log = logging.getLogger(__name__)
 
@@ -22,66 +23,51 @@ def collate(batch):
     return default_collate(batch)
 
 
-def create_kinetics400_dataloader(transform=None):
+def create_kinetics_dataloader(cfg: DictConfig):
     """Create dataloader for Kinetics400 dataset."""
-    cache_path = "/home/jovyan/downloads/kinetics400.pt"
-    dataset_path = "/home/jovyan/downloads/kinetics400/"
-    clips_per_video = 1
-
-    transform = transform if transform else create_train_pipeline()
     rng = torch.manual_seed(42)
 
-    try:
-        dataset = torch.load(cache_path)
-        cached_metadata = dict(
-            video_paths=dataset.video_clips.video_paths,
-            video_fps=dataset.video_clips.video_fps,
-            video_pts=dataset.video_clips.video_pts,
-        )
-    except FileNotFoundError:
-        dataset = None
-        cached_metadata = None
+    meta = None
+    if cfg.data.cache_path:
+        try:
+            cache = torch.load(cfg.data.cache_path)
+            meta = dict(
+                video_paths=cache.video_clips.video_paths,
+                video_fps=cache.video_clips.video_fps,
+                video_pts=cache.video_clips.video_pts,
+            )
+            log.info(f"Dataset Cache: {cfg.data.cache_path}")
+        except FileNotFoundError:
+            pass
 
-    kwargs = dict(
-        root=dataset_path,
-        frames_per_clip=4,
-        num_classes="400",
-        split="val",
-        frame_rate=8,
-        step_between_clips=8,
-        download=True,
-        num_workers=16,
-        num_download_workers=16,
-        output_format="TCHW",
-        _precomputed_metadata=cached_metadata,
+    transform = (
+        instantiate(cfg.data.transform.pipeline)
+        if cfg.data.transform
+        else create_train_pipeline()
     )
-    try:
-        dataset = torchvision.datasets.Kinetics(**kwargs)
-    except:
-        dataset = torchvision.datasets.Kinetics(**{**kwargs, "download": False})
+    log.info(f"Pipeline:\n{transform}")
 
-    torch.save(dataset, cache_path)
+    try:
+        dataset: Kinetics = instantiate(
+            cfg.data.dataset, _precomputed_metadata=meta, download=True
+        )
+    except:
+        dataset = instantiate(cfg.data.dataset, _precomputed_metadata=meta)
+
+    torch.save(dataset, cfg.data.cache_path)
     # Don't save transform into cache else loading may fail.
     dataset.transform = transform
 
-    # Carry over for limiting dataset size.
-    subset_idx = list(
-        torch.randperm(dataset.video_clips.num_videos(), generator=rng)[:5000]
-    )
+    log.info(f"Total Videos: {dataset.video_clips.num_videos()}")
+    log.info(f"Total Clips: {len(dataset)}")
 
-    sampler = RandomClipSampler(dataset.video_clips.subset(subset_idx), clips_per_video)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=64,
+    sampler = instantiate(cfg.data.sampler, video_clips=dataset.video_clips)
+
+    dataloader: DataLoader = instantiate(
+        cfg.data.dataloader,
+        dataset=dataset,
         sampler=sampler,
-        num_workers=16,
-        collate_fn=collate,
-        pin_memory=True,
         generator=rng,
+        collate_fn=collate,
     )
-
-    log.info(f"Total videos: {dataset.video_clips.num_videos()}")
-    log.info(f"Total clips: {len(dataset)}")
-    log.info(f"Filtered clips: {len(dataloader) * dataloader.batch_size}")
-
     return dataloader

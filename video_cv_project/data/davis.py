@@ -9,7 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from .vos import VOSDataset
+from .vos import VOSDataset, vos_collate
 
 __all__ = ["DAVISDataset", "create_davis_dataloader"]
 
@@ -62,6 +62,10 @@ def create_davis_dataloader(cfg: DictConfig, map_scale: int):
     dataset = instantiate(cfg.data.dataset, map_scale=map_scale, transform=transform)
     sampler = instantiate(cfg.data.sampler, data_source=dataset)
     dataloader: DataLoader = instantiate(
-        cfg.data.dataloader, dataset=dataset, sampler=sampler, generator=rng
+        cfg.data.dataloader,
+        dataset=dataset,
+        sampler=sampler,
+        generator=rng,
+        collate_fn=vos_collate,
     )
     return dataloader

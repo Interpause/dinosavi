@@ -10,6 +10,7 @@ from torchinfo import summary
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.checkpointer import Checkpointer
 from video_cv_project.data.davis import create_davis_dataloader
+from video_cv_project.engine.vos import vos_propagate
 from video_cv_project.models import CRW
 from video_cv_project.utils import get_dirs
 
@@ -32,6 +33,8 @@ def eval(cfg: DictConfig):
 
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     log.info(f"Torch Device: {device}")
+    context_len = cfg.data.dataset.context_len
+    log.info(f"Context Length: {context_len}")
 
     log.debug("Create Model.")
     model: CRW = instantiate(cfg.model)
@@ -57,9 +60,26 @@ def eval(cfg: DictConfig):
     encoder.to(device).eval()
 
     with torch.inference_mode():
-        for idx, (ims, lbls, lbl_cls, meta) in enumerate(dataloader):
-            print(ims.shape, lbls.shape, lbl_cls.shape)
-            assert False
-            ims = ims.to(device)
-            lbls = lbls.to(device)
-            lbl_cls = lbl_cls.to(device)
+        for i, (ims, orig_ims, lbls, lbl_cls, meta) in enumerate(dataloader):
+            B, T = ims.shape[:2]
+            assert B == 1, "Video batch size must be 1."
+
+            # Prepended frames are inferred on & contribute to run time.
+            log.info(
+                f"{i}/{len(dataloader)}: Processing {meta[0]['im_dir']} with {T} frames."
+            )
+
+            save_dir = out_dir / "results" / f"video{i}"
+            save_dir.mkdir(exist_ok=True, parents=True)
+
+            vos_propagate(
+                encoder,
+                str(save_dir),
+                ims,
+                orig_ims,
+                lbls,
+                lbl_cls,
+                batch_size=cfg.data.batch_size,
+                context_len=context_len,
+                device=device,
+            )

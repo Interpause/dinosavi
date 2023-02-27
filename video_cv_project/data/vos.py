@@ -8,9 +8,9 @@ import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, default_collate
 
-__all__ = ["VOSDataset"]
+__all__ = ["VOSDataset", "vos_collate"]
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +81,8 @@ class VOSDataset(Dataset):
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-                ims: TCHW video frames. Note they aren't normalized.
+                ims: TCHW video frames.
+                orig_ims: TCHW original video frames.
                 tgts: TNHW one-hot label embeddings.
                 lbl_cls: NC label classes where N is number of classes & C is the color.
                 meta: Metadata. Useful to load original images for visualization.
@@ -135,16 +136,23 @@ class VOSDataset(Dataset):
             # HWNC == NC -> HWN -> NHW, where N is each class.
             tgt = torch.all(lbl == lbl_cls, dim=3).permute(2, 0, 1)
             # Resize to latent map size. Using smooth scaling is fine here.
-            tgt = F.resize(tgt.to(torch.float32), lbl_sz)
+            tgt = F.resize(tgt.to(torch.float), lbl_sz)
 
             # TODO: Original has support for texture task here.
 
             tgts.append(tgt)
 
-        ims = self.transform(self.repeat_context(ims))
+        ims = self.repeat_context(ims)
         tgts = self.repeat_context(tgts)
-        return ims, torch.stack(tgts), lbl_cls, meta
+        return self.transform(ims), torch.stack(ims), torch.stack(tgts), lbl_cls, meta
 
     def __len__(self):
         """Dataset length."""
         return len(self.im_dirs)
+
+
+def vos_collate(batch):
+    """Exclude metadata from being batched by dataloader."""
+    metas = [b[-1] for b in batch]
+    batch = [b[:-1] for b in batch]
+    return (*default_collate(batch), metas)

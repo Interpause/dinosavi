@@ -1,9 +1,11 @@
 """Utility functions used by the CRW model."""
 
+from functools import cache
+
 import torch
 import torch.nn.functional as F
 
-__all__ = ["calc_affinity", "zero_out_diag", "calc_markov"]
+__all__ = ["calc_affinity", "zero_out_diag", "calc_markov", "create_crw_target"]
 
 
 def zero_out_diag(x: torch.Tensor):
@@ -62,4 +64,25 @@ def calc_markov(
     if zero_diag:
         affinity = zero_out_diag(affinity)
     affinity = F.dropout(affinity, p=dropout, training=do_dropout)
-    return F.softmax(affinity / temperature, dim=-1)
+    return F.softmax(affinity / temperature, dim=2)
+
+
+@cache
+def create_crw_target(batch_size: int, num_nodes: int, device: torch.device):
+    """Create palindrome target for contrastive loss.
+
+    Class ids are assigned to each node. For example, if there are 25 patches,
+    they will be labelled from 0 to 24. This is repeated for each batch, allowing
+    cross-entropy loss to be calculated for the entire batch at once.
+
+    This function is memoized.
+
+    Args:
+        batch_size (int): Batch size.
+        num_nodes (int): Number of nodes.
+        device (torch.device): Device to use.
+
+    Returns:
+        torch.Tensor: Suitable tensor of class ids.
+    """
+    return torch.arange(num_nodes, device=device).repeat(batch_size)

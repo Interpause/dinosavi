@@ -13,7 +13,12 @@ import torch.nn.functional as F
 
 from video_cv_project.cfg import BEST_DEVICE, EPS, RGB
 from video_cv_project.models.heads import FCHead
-from video_cv_project.utils import calc_affinity, calc_markov, infer_outdim
+from video_cv_project.utils import (
+    calc_affinity,
+    calc_markov,
+    create_crw_target,
+    infer_outdim,
+)
 
 __all__ = ["CRW"]
 
@@ -74,8 +79,6 @@ class CRW(nn.Module):
         self.feat_dropout = feat_dropout
 
         self.temperature = temperature
-        # Cache of node class ids for cross-entropy loss.
-        self._target_cache: Dict[str, torch.Tensor] = {}
 
         self.to(device)
 
@@ -157,28 +160,10 @@ class CRW(nn.Module):
 
             # NOTE: I removed walking to the left since it was marked as "bug" in
             # the original's argument.py.
-            walks[f"cyc r{i}"] = (path, self._get_target(path))
+            B, N, _ = path.shape
+            walks[f"cyc r{i}"] = (path, create_crw_target(B, N, path.device))
 
         return walks
-
-    def _get_target(self, path: torch.Tensor):
-        """Create & cache target class ids for cross-entropy loss.
-
-        Class ids are assigned to each node. For example, if there are 25 patches,
-        they will be labelled from 0 to 24. This is repeated for each batch, allowing
-        cross-entropy loss to be calculated for the entire batch at once.
-
-        Args:
-            path (torch.Tensor): BNM Markov matrix.
-
-        Returns:
-            torch.Tensor: Suitable target class id based on shape of ``path``.
-        """
-        B, N, _ = path.shape
-        key = f"{path.device}:B{B}N{N}"
-        if key not in self._target_cache:
-            self._target_cache[key] = torch.arange(N).repeat(B).to(path.device)
-        return self._target_cache[key]
 
     def _calc_loss(self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]):
         """Calculate cross-entropy loss.

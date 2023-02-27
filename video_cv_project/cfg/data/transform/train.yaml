@@ -30,6 +30,6 @@ patch_transforms:
   # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
   - _target_: torchvision.transforms.RandomResizedCrop
     size: ${...patch_size}
-    scale: [0.8, 0.95]
+    scale: [0.7, 0.95]
     ratio: [1.0, 1.0]
     interpolation: ${...interpolation}

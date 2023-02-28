@@ -22,4 +22,4 @@ sampler:
 
 dataloader:
   batch_size: 1
-  pin_memory: false
+  pin_memory: true

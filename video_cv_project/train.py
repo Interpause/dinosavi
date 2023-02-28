@@ -10,7 +10,7 @@ from torchinfo import summary
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.checkpointer import Checkpointer
 from video_cv_project.data import create_kinetics_dataloader
-from video_cv_project.utils import get_dirs, iter_pbar
+from video_cv_project.utils import get_dirs, iter_pbar, perf_hack
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ def train(cfg: DictConfig):
     ckpt_dir = out_dir / CKPT_FOLDER
     ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.
 
+    perf_hack()
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     epochs = cfg.train.epochs
     log_every = cfg.train.log_every

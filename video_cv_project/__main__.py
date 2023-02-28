@@ -6,7 +6,7 @@ import warnings
 import hydra
 from omegaconf import DictConfig
 
-from video_cv_project.utils import get_dirs
+from video_cv_project.utils.logging import get_dirs
 
 log = logging.getLogger("video_cv_project")
 

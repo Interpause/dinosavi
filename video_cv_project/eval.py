@@ -12,7 +12,7 @@ from video_cv_project.checkpointer import Checkpointer
 from video_cv_project.data import create_davis_dataloader
 from video_cv_project.engine import dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
-from video_cv_project.utils import get_dirs
+from video_cv_project.utils import get_dirs, perf_hack
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ def eval(cfg: DictConfig):
     ckpt_dir = out_dir / CKPT_FOLDER
     ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.
 
+    perf_hack()
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     log.info(f"Torch Device: {device}")
     context_len = cfg.eval.context_len

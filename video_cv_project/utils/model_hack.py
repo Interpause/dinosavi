@@ -7,9 +7,22 @@ import torch.nn as nn
 
 from video_cv_project.cfg import BEST_DEVICE
 
-__all__ = ["find_layers", "delete_layers", "override_forward", "infer_outdim"]
+__all__ = [
+    "find_layers",
+    "delete_layers",
+    "override_forward",
+    "infer_outdim",
+    "perf_hack",
+]
 
 Self = TypeVar("Self")
+
+
+def perf_hack():
+    """Pytorch performance hacks."""
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 
 def find_layers(model: nn.Module, names: Sequence[str]):

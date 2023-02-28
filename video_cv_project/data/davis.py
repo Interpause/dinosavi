@@ -7,6 +7,7 @@ from typing import Callable, Tuple
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from PIL import Image
 from torch.utils.data import DataLoader
 
 from .vos import VOSDataset, vos_collate
@@ -38,6 +39,7 @@ class DAVISDataset(VOSDataset):
         imageset_txt = r / "ImageSets" / year / f"{split}.txt"
         with imageset_txt.open() as f:
             videos = [l for s in f.readlines() if (l := s.strip()) != ""]
+            self.videos = videos
 
         for video in videos:
             lbl_dir = r / "Annotations" / quality / video
@@ -50,6 +52,10 @@ class DAVISDataset(VOSDataset):
         super().__init__(
             im_dirs, lbl_dirs, im_size, transform, map_scale, context_len, True
         )
+
+        # DAVIS dataset should have palette.
+        # NOTE: Must load here as changes to dataset in workers do not reflect.
+        self.palette = Image.open(lbl_paths[0]).getpalette()
 
 
 def create_davis_dataloader(cfg: DictConfig, map_scale: int):

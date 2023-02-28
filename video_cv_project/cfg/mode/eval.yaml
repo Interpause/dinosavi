@@ -6,7 +6,12 @@ defaults:
 
 mode: eval
 
-model:
-  edge_dropout: 0.0
-  feat_dropout: 0.0
+eval:
+  context_len: 20
+  topk: 10
+  radius: 12
   temperature: 0.05
+  extra_idx: []
+
+dataset:
+  context_len: ${eval.context_len}

@@ -4,6 +4,7 @@ import logging
 from math import ceil
 from typing import Callable, List, Sequence, Tuple
 
+import numpy as np
 import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
@@ -15,17 +16,49 @@ __all__ = ["VOSDataset", "vos_collate"]
 log = logging.getLogger(__name__)
 
 
-def load_images(im_paths: Sequence[str], mode: str = "RGB", to_tensor: bool = True):
+def load_images(im_paths: Sequence[str]):
     """Load images from path."""
-    ims: List[torch.Tensor] = []
+    ims: List[Image.Image] = []
     for path in im_paths:
-        im = Image.open(path)
         try:
-            im = im.convert(mode=mode)
-            ims.append(F.to_tensor(im) if to_tensor else im)
+            Image.open(path).verify()
+            ims.append(Image.open(path))
         except Exception as e:
             log.warning(f"Skipping {path} due to {e}.")
     return ims
+
+
+def images_to_tensor(ims: Sequence[Image.Image], mode: str | None = "RGB"):
+    """Convert images to tensor."""
+    ims = [im.convert(mode=mode) if mode else im for im in ims]
+    return [F.to_tensor(im) for im in ims]
+
+
+def labels_to_tensor(lbls: Sequence[Image.Image]):
+    """Palette-aware conversion of labels to TNHW tensor."""
+    pal = lbls[0].getpalette() if lbls[0].mode == "P" else None
+    # Either THWC or THW depending on image mode.
+    _lbls = torch.stack([torch.from_numpy(np.array(lbl)) for lbl in lbls])
+
+    # `_lbls` is THW, where values are the class.
+    if pal:
+        _cls: torch.Tensor = torch.unique(_lbls)  # N unique classes.
+        # THW -> TNHW one-hot label embeddings/bitmasks.
+        _lbls = _lbls[:, None, :, :].expand(-1, len(_cls), -1, -1)
+        return (
+            list(_lbls.eq(_cls[:, None, None])),
+            torch.tensor(pal).reshape(-1, 3),
+            pal,
+        )
+
+    # `_lbls` is THWC.
+    else:
+        _cls = find_label_classes(_lbls.transpose(0, 3))  # NC unique class colors.
+        # THWC -> NTHWC -> THWNC
+        _lbls = _lbls.expand(len(_cls), -1, -1, -1, -1).permute(1, 2, 3, 0, 4)
+        # THWNC == NC -> THWN -> TNHW
+        _lbls = torch.all(_lbls == _cls, dim=4).permute(0, 3, 1, 2)
+        return list(_lbls), _cls, None
 
 
 def find_label_classes(lbl: torch.Tensor) -> torch.Tensor:
@@ -65,10 +98,11 @@ class VOSDataset(Dataset):
         self.map_scale = map_scale  # Downscale labels to encoder's latent map size.
         self.context_len = context_len
         self.is_frames = is_frames
+        self.palette: List[int] | None = None
         # TODO: Support loading videos directly?
         assert is_frames, "Only loading videos split as frames is supported for now."
 
-    def repeat_context(self, items: Sequence):
+    def _repeat_context(self, items: Sequence):
         """Repeat items for context length."""
         return [items[0]] * self.context_len + list(items)
 
@@ -92,17 +126,20 @@ class VOSDataset(Dataset):
         im_dir, im_paths = self.im_dirs[index]
         lbl_dir, lbl_paths = self.lbl_dirs[index]
 
-        ims = load_images(im_paths, to_tensor=False)
-        lbls = load_images(lbl_paths, to_tensor=True)
+        ims = load_images(im_paths)
+        raw_lbls = load_images(lbl_paths)
+
+        lbls, lbl_cls, _ = labels_to_tensor(raw_lbls)
 
         for i in range(len(ims)):
             im, lbl = ims[i], lbls[i]
 
             if self.im_size != -1:
+                # Some interpolation methods only support PIL.
                 im = F.resize(im, self.im_size)
                 lbl = F.resize(
                     lbl, self.im_size, interpolation=T.InterpolationMode.NEAREST
-                )  # Must use nearest to preserve label colors.
+                )  # Must use nearest to preserve labels.
 
             # NOTE: Original had option to convert to LAB colorspace here.
 
@@ -111,8 +148,8 @@ class VOSDataset(Dataset):
         meta = dict(
             im_dir=im_dir,
             lbl_dir=lbl_dir,
-            im_paths=self.repeat_context(im_paths),
-            lbl_paths=self.repeat_context(lbl_paths),
+            im_paths=self._repeat_context(im_paths),
+            lbl_paths=self._repeat_context(lbl_paths),
         )
 
         lbls = torch.stack(lbls)  # TCHW
@@ -120,30 +157,11 @@ class VOSDataset(Dataset):
             ceil(lbls.shape[-2] / self.map_scale),
             ceil(lbls.shape[-1] / self.map_scale),
         )  # H, W
-        lbl_cls = find_label_classes((lbls[0] * 255).to(torch.uint8))  # NC
-        N = lbl_cls.shape[0]  # Number of classes.
+        # Should downscale after encoding in case regions overlap.
+        lbls = F.resize(lbls.to(torch.float), lbl_sz)
 
-        # Target labels in the form of TNHW one-hot embeddings.
-        tgts: List[torch.Tensor] = []
-        for lbl in lbls:
-            # This one-hot encoding method is both space & time efficient! Expanding
-            # tensors doesn't copy data.
-            # Should calculate one-hot before resizing since some regions might
-            # overlap after downscale.
-
-            # CHW -> NCHW -> HWNC
-            lbl = (lbl * 255).to(torch.uint8).expand(N, -1, -1, -1).permute(2, 3, 0, 1)
-            # HWNC == NC -> HWN -> NHW, where N is each class.
-            tgt = torch.all(lbl == lbl_cls, dim=3).permute(2, 0, 1)
-            # Resize to latent map size. Using smooth scaling is fine here.
-            tgt = F.resize(tgt.to(torch.float), lbl_sz)
-
-            # TODO: Original has support for texture task here.
-
-            tgts.append(tgt)
-
-        ims = self.repeat_context(ims)
-        tgts = self.repeat_context(tgts)
+        ims = self._repeat_context(ims)
+        tgts = self._repeat_context(lbls)
         return self.transform(ims), torch.stack(ims), torch.stack(tgts), lbl_cls, meta
 
     def __len__(self):

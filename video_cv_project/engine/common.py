@@ -8,7 +8,12 @@ import torch.nn.functional as F
 
 from video_cv_project.cfg import BEST_DEVICE
 
-__all__ = ["calc_context_frame_idx", "create_spatial_mask", "batched_affinity"]
+__all__ = [
+    "calc_context_frame_idx",
+    "create_spatial_mask",
+    "batched_affinity",
+    "propagate_labels",
+]
 
 
 @cache
@@ -111,7 +116,7 @@ def batched_affinity(
             Is: BTkQ indexes of top-k context pixels for each query pixel.
             Ws: BTkQ affinities of top-k context pixels for each query pixel.
     """
-    # Memory corruption seems to occur even at batch size of 4.
+    # Memory corruption seems to occur even at batch size of 2 for `torch.topk`.
     # hardcode to 1, ~= 4GB VRAM usage.
     # TODO: Consider implementing original's pixel-level batching.
     b = 1
@@ -142,3 +147,99 @@ def batched_affinity(
         Ws.append(weights.cpu())
 
     return torch.cat(Is, dim=1), torch.cat(Ws, dim=1)
+
+
+def propagate_labels(
+    encoder: torch.nn.Module,
+    ims: torch.Tensor,
+    lbls: torch.Tensor,
+    context_len: int = 20,
+    topk: int = 10,
+    radius: float = 12.0,
+    temperature: float = 0.05,
+    extra_idx: Tuple[int, ...] = tuple(),
+    batch_size: int = 1,
+    device: torch.device = BEST_DEVICE,
+):
+    """Propagate labels.
+
+    Args:
+        encoder (torch.nn.Module): Encoder used to extract image features.
+        ims (torch.Tensor): BTCHW images.
+        lbls (torch.Tensor): BTNHW bitmasks for each class N.
+        context_len (int, optional): Number of context frames.
+        topk (int, optional): Top-k pixels to use for label propagation.
+        radius (float, optional): Radius of attention mask.
+        temperature (float, optional): Temperature for softmax.
+        extra_idx (Tuple[int, ...], optional): Extra frames always included in context.
+        batch_size (int, optional): Batch size for encoding images & calculating affinities.
+        device (torch.device, optional): Device to use. Defaults to BEST_DEVICE.
+
+    Returns:
+        torch.Tensor: BTNHW propagated labels.
+    """
+    b = batch_size
+    T = ims.shape[1]
+    # T includes prepended repeats of initial frame.
+    num_frames = T - context_len
+
+    # Mask labels for frames after the initial frame.
+    lbls[:, context_len:] *= 0
+
+    # BTCHW -> BCTHW
+    ims = ims.transpose(1, 2)
+    # TODO: Don't repeat encode for repeat frames.
+    feats = torch.cat(
+        [encoder(ims[:, :, t : t + b].to(device)).cpu() for t in range(0, T, b)], dim=2
+    )
+    feats = F.normalize(feats, p=2, dim=1)  # Euclidean norm.
+
+    # TN, where N is the context frames for each time step T.
+    key_idx = calc_context_frame_idx(num_frames, context_len, extra_idx)
+    # BCTNHW context frames for each frame.
+    keys = feats[:, :, key_idx]
+    # BCTNHW -> BCTN(H*W) context features.
+    keys = keys.flatten(-2)
+    # Remove prepended repeats.
+    query = feats[:, :, context_len:]
+    # BCTHW -> BCT(H*W) query frames.
+    query = query.flatten(-2)
+    # PQ, where P is each pixel & Q is each other pixel.
+    mask = create_spatial_mask(*feats.shape[-2:], radius)
+
+    # BTkQ indexes, BTkQ weights, where k is the top-k context pixels.
+    topk_idx, weights = batched_affinity(
+        query,
+        keys,
+        mask,
+        topk,
+        temperature,
+        batch_size,
+        len(extra_idx) + 1,
+        device=device,
+    )
+
+    batches = []
+    # By right should only have 1 batch.
+    for _lbls, Is, Ws in zip(lbls, topk_idx, weights):
+        preds = []
+        # Frame by frame propagation.
+        for t in range(num_frames):
+            # TNHW context labels, where T are context frames & N are label classes.
+            ctx_lbls = _lbls[key_idx[t]].to(device)
+            # TNHW -> -> NTHW -> N(T*H*W) context pixels.
+            ctx_lbls = ctx_lbls.transpose(0, 1).flatten(1)
+            # kQ weights for top-k context pixels.
+            w = Ws[t].to(device)
+
+            # Weighted sum of top-k context pixels.
+            # NQ -> NHW predicted label classes for each query pixel.
+            pred = (ctx_lbls[:, Is[t]] * w).sum(1).reshape(-1, *feats.shape[-2:])
+
+            # TODO: Original used real labels for frame 0. Is there some reason?
+            # Propagate labels.
+            _lbls[context_len + t] = pred
+
+            preds.append(pred.cpu())
+        batches.append(torch.stack(preds, dim=0))
+    return torch.stack(batches, dim=0)

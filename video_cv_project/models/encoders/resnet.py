@@ -61,8 +61,8 @@ def create_resnet_encoder(
             f"{name} isn't explicitly supported. Pretrained weights may change depending on torchvision `DEFAULT` version."
         )
 
-    _weights = SUPPORTED_RESNET_VARIANTS.get(name, "DEFAULT") if ... else weights
-    model = get_model(name, weights=_weights, **kwargs)
+    weights = SUPPORTED_RESNET_VARIANTS.get(name, "DEFAULT") if ... else weights
+    model = get_model(name, weights=weights, **kwargs)
 
     # Reduce stride of layer3 & layer4 to 1.
     for layer in find_layers(model, ("layer3", "layer4")):

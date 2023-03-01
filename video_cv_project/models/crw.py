@@ -12,13 +12,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from video_cv_project.cfg import BEST_DEVICE, EPS, RGB
-from video_cv_project.models.heads import FCHead
 from video_cv_project.utils import (
     calc_affinity,
     calc_markov,
     create_crw_target,
     infer_outdim,
 )
+
+from .heads import FCHead
 
 __all__ = ["CRW"]
 
@@ -67,10 +68,10 @@ class CRW(nn.Module):
         super(CRW, self).__init__()
 
         # Arbitrary BCTHW input is fine.
-        _sz = 256
-        _enc_dim = infer_outdim(encoder, (1, RGB, 1, _sz, _sz), device=device)
-        self.enc_channels = _enc_dim[1]  # Encoder output channels.
-        self.map_scale = _sz // _enc_dim[-1]  # Downscale factor of latent map.
+        sz = 256
+        enc_dim = infer_outdim(encoder, (1, RGB, 1, sz, sz), device=device)
+        self.enc_channels = enc_dim[1]  # Encoder output channels.
+        self.map_scale = sz // enc_dim[-1]  # Downscale factor of latent map.
 
         self.encoder = encoder
         self.head = FCHead(self.enc_channels, num_feats, head_depth)
@@ -182,14 +183,14 @@ class CRW(nn.Module):
 
         for name, (path, target) in walks.items():
             # BNM -> (B*N)M
-            logits = torch.log(path + EPS).flatten(0, 1)
+            logits = (path + EPS).log().flatten(0, 1)
             loss = F.cross_entropy(logits, target)
             losses.append(loss)
 
             # TODO: Adding logits to debug might be useful for visualization.
             debug[name] = {
                 "loss": float(loss),
-                "accuracy": float((logits.argmax(-1) == target).float().mean()),
+                "accuracy": float(logits.argmax(-1).eq(target).float().mean()),
                 "patches": path.shape[1],
             }
 

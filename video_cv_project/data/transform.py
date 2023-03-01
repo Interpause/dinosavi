@@ -27,7 +27,6 @@ class MapTransform:
     def __init__(self, *args: Callable):
         """Create MapTransform."""
         self.transforms = args
-        self._t = T.Compose(args)
 
     def __call__(self, ims: torch.Tensor):
         """Apply transforms to NCHW tensor.
@@ -38,16 +37,13 @@ class MapTransform:
         Returns:
             torch.Tensor: Transformed NCHW images.
         """
-        return torch.stack([self._t(im) for im in ims])
+        t = T.Compose(self.transforms)
+        return torch.stack([t(im) for im in ims])
 
     def __repr__(self):
         """Return string representation of class."""
-        display = self.__class__.__name__ + "("
-        for t in self.transforms:
-            for line in repr(t).splitlines():
-                display += f"\n  {line}"
-        display += "\n)"
-        return display
+        lines = "\n  ".join(l for t in self.transforms for l in repr(t).splitlines())
+        return f"{self.__class__.__name__}(\n  {lines}\n)"
 
 
 class PatchSplitTransform:
@@ -183,7 +179,7 @@ def create_train_pipeline(
         T.ToPILImage(),
         # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
         T.RandomResizedCrop(
-            patch_size, scale=(0.8, 0.95), ratio=(1.0, 1.0), interpolation=scaler
+            patch_size, scale=(0.8, 0.95), ratio=(0.9, 1.1), interpolation=scaler
         ),
         T.ToTensor(),
         # Cannot convert to PIL after normalization.

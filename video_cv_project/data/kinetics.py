@@ -8,7 +8,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader, default_collate
 from torchvision.datasets import Kinetics
 
-from video_cv_project.data.transform import create_train_pipeline
+from .transform import create_train_pipeline
 
 __all__ = ["create_kinetics_dataloader"]
 
@@ -23,14 +23,14 @@ def collate(batch):
     return default_collate(batch)
 
 
-def create_kinetics_dataloader(cfg: DictConfig):
+def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
     """Create dataloader for Kinetics dataset."""
     rng = torch.manual_seed(42)
 
     meta = None
     if cfg.data.cache_path:
         try:
-            cache = torch.load(cfg.data.cache_path)
+            cache: Kinetics = torch.load(cfg.data.cache_path)
             meta = dict(
                 video_paths=cache.video_clips.video_paths,
                 video_fps=cache.video_clips.video_fps,
@@ -63,7 +63,7 @@ def create_kinetics_dataloader(cfg: DictConfig):
 
     sampler = instantiate(cfg.data.sampler, video_clips=dataset.video_clips)
 
-    dataloader: DataLoader = instantiate(
+    dataloader = instantiate(
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,

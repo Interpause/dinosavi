@@ -7,7 +7,6 @@ from typing import Callable, Tuple
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from PIL import Image
 from torch.utils.data import DataLoader
 
 from .vos import VOSDataset, vos_collate
@@ -53,12 +52,8 @@ class DAVISDataset(VOSDataset):
             im_dirs, lbl_dirs, im_size, transform, map_scale, context_len, True
         )
 
-        # DAVIS dataset should have palette.
-        # NOTE: Must load here as changes to dataset in workers do not reflect.
-        self.palette = Image.open(lbl_paths[0]).getpalette()
 
-
-def create_davis_dataloader(cfg: DictConfig, map_scale: int):
+def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
     """Create dataloader for DAVIS dataset."""
     rng = torch.manual_seed(42)
 
@@ -67,7 +62,7 @@ def create_davis_dataloader(cfg: DictConfig, map_scale: int):
 
     dataset = instantiate(cfg.data.dataset, map_scale=map_scale, transform=transform)
     sampler = instantiate(cfg.data.sampler, data_source=dataset)
-    dataloader: DataLoader = instantiate(
+    dataloader = instantiate(
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,

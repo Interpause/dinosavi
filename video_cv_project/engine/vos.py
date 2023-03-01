@@ -1,25 +1,24 @@
 """Code for applying model for Video Object Segmentation."""
 
 from pathlib import Path
-from typing import List
+from typing import Sequence
 
 import torch
 import torchvision.transforms.functional as F
-from PIL import Image
+
+from video_cv_project.data.common import images_to_tensor, load_images
+
+from .common import save_image
 
 __all__ = ["dump_vos_preds"]
 
 
-# TODO: Load image from metadata.
-# Prevents dataloader needing to store both normalized & original images, wasting memory.
-
-
 def dump_vos_preds(
     save_dir: str,
-    ims: torch.Tensor,
+    im_paths: Sequence[str],
     lbls: torch.Tensor,
-    lbl_cls: torch.Tensor,
-    palette: List[int] | None = None,
+    colors: torch.Tensor,
+    has_palette: bool = False,
     blend_name: str = "x_%d_blend.jpg",
     mask_name: str = "x_%d_mask.png",
 ):
@@ -29,15 +28,17 @@ def dump_vos_preds(
 
     Args:
         save_dir (str): Directory to save predictions to.
-        ims (torch.Tensor): TCHW video frames.
+        im_paths (Sequence[str]): Paths of images to blend predictions with.
         lbls (torch.Tensor): TNHW bitmasks for each class N.
-        lbl_cls (torch.Tensor): Label colors.
-        palette (List[int], optional): Color palette for label image.
+        colors (torch.Tensor): Label colors.
+        has_palette (bool, optional): Where to use a palette for label images. Defaults to False.
         blend_name (str, optional): Filename format for blended image. Defaults to "x_%d_blend.jpg".
         mask_name (str, optional): Filename format for label image. Defaults to "x_%d_mask.png".
     """
-    sz = ims.shape[-2:]
     out_dir = Path(save_dir)
+    ims = images_to_tensor(load_images(im_paths), mode="RGB")
+    sz = ims[0].shape[-2:]
+    pal = colors.flatten().tolist()
 
     for t, (im, lbl) in enumerate(zip(ims, lbls)):
         # Resize labels to original size.
@@ -45,28 +46,14 @@ def dump_vos_preds(
         lbl = F.resize(lbl, sz)
 
         # Argmax to get predicted class for each pixel.
-        lbl = torch.argmax(lbl, dim=0)
+        lbl = lbl.argmax(dim=0)
 
         # Get colors for each class.
-        color = lbl_cls[lbl].permute(2, 0, 1) / 255.0
+        color_lbl = colors[lbl].permute(2, 0, 1) / 255.0
 
         # Save label.
-        save_image(lbl if palette else color, out_dir / f"{mask_name % t}", palette)
+        save_image(lbl if has_palette else color_lbl, out_dir / f"{mask_name % t}", pal)
 
         # Save blended image for visualization.
-        overlay = im * 0.5 + color * 0.5
+        overlay = im * 0.5 + color_lbl * 0.5
         save_image(overlay, out_dir / f"{blend_name % t}")
-
-
-def save_image(im: torch.Tensor, path: Path, palette: List[int] | None = None):
-    """Converts image to the DAVIS color palette & saves it.
-
-    Ensures parent directory exists before saving image.
-    """
-    path.parent.mkdir(exist_ok=True, parents=True)
-    if palette:
-        _im = Image.fromarray(im.to(torch.uint8).numpy(), mode="P")
-        _im.putpalette(palette, "RGB")
-    else:
-        _im = F.to_pil_image(im)
-    _im.save(path)

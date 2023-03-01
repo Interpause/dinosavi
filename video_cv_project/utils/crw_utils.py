@@ -85,4 +85,4 @@ def create_crw_target(batch_size: int, num_nodes: int, device: torch.device):
     Returns:
         torch.Tensor: Suitable tensor of class ids.
     """
-    return torch.arange(num_nodes, device=device).repeat(batch_size)
+    return torch.arange(num_nodes).to(device).repeat(batch_size)

@@ -1,10 +1,13 @@
 """Code shared by most model applications."""
 
 from functools import cache
+from pathlib import Path
 from typing import List, Tuple
 
 import torch
 import torch.nn.functional as F
+import torchvision.transforms.functional as TF
+from PIL import Image
 
 from video_cv_project.cfg import BEST_DEVICE
 
@@ -39,7 +42,7 @@ def calc_context_frame_idx(
     Returns:
         torch.Tensor: TN indexes of context frames for each frame, where T is the current frame & N is each context frame.
     """
-    context: List[torch.Tensor] = [torch.zeros(num_frames, 1, dtype=torch.long)]
+    context = [torch.zeros(num_frames, 1, dtype=torch.long)]
     for t in extra_idx:
         assert 0 <= t < num_frames
         n = context_len + t + 1  # Account for prepended repeats.
@@ -125,11 +128,11 @@ def batched_affinity(
 
     Is, Ws = [], []
     for t in range(0, T, b):
-        _k = keys[:, :, t : t + b].to(device)
-        _q = query[:, :, t : t + b].to(device)
+        bk = keys[:, :, t : t + b].to(device)
+        bq = query[:, :, t : t + b].to(device)
 
         # BTNPQ: P & Q are pixels for each frame, N is each context frame.
-        A = torch.einsum("bctnp,bctq->btnpq", _k, _q)
+        A = torch.einsum("bctnp,bctq->btnpq", bk, bq)
 
         # Apply spatial mask, skipping frames always included in context.
         A[:, :, num_extra_frames:] += mask
@@ -143,7 +146,7 @@ def batched_affinity(
         # Bug with `torch.topk` since 1.13.1.
         # Mitigation: Reduce size of affinity matrix by decreasing batch size,
         # context length, batching at pixel level, or using sparse matrix.
-        weights, idx = torch.topk(A, topk, dim=2)
+        weights, idx = A.topk(topk, dim=2)
         weights = F.softmax(weights / temperature, dim=2)
 
         Is.append(idx.cpu())
@@ -224,25 +227,39 @@ def propagate_labels(
 
     batches = []
     # By right should only have 1 batch.
-    for _lbls, Is, Ws in zip(lbls, topk_idx, weights):
+    for Ls, Is, Ws in zip(lbls, topk_idx, weights):
         preds = []
         # Frame by frame propagation.
         for t in range(num_frames):
             # TNHW context labels, where T are context frames & N are label classes.
-            ctx_lbls = _lbls[key_idx[t]].to(device)
+            ctx = Ls[key_idx[t]].to(device)
             # TNHW -> -> NTHW -> N(T*H*W) context pixels.
-            ctx_lbls = ctx_lbls.transpose(0, 1).flatten(1)
+            ctx = ctx.transpose(0, 1).flatten(1)
             # kQ weights for top-k context pixels.
             w = Ws[t].to(device)
 
             # Weighted sum of top-k context pixels.
             # NQ -> NHW predicted label classes for each query pixel.
-            pred = (ctx_lbls[:, Is[t]] * w).sum(1).reshape(-1, *feats.shape[-2:])
+            pred = (ctx[:, Is[t]] * w).sum(1).reshape(-1, *feats.shape[-2:])
 
             # TODO: Original used real labels for frame 0. Is there some reason?
             # Propagate labels.
-            _lbls[context_len + t] = pred
+            Ls[context_len + t] = pred
 
             preds.append(pred.cpu())
-        batches.append(torch.stack(preds, dim=0))
-    return torch.stack(batches, dim=0)
+        batches.append(torch.stack(preds))
+    return torch.stack(batches)
+
+
+def save_image(image: torch.Tensor, path: Path, palette: List[int] = None):
+    """Save image with optional palette.
+
+    Ensures parent directory exists before saving image.
+    """
+    path.parent.mkdir(exist_ok=True, parents=True)
+    if palette:
+        im = Image.fromarray(image.byte().numpy(), mode="P")
+        im.putpalette(palette, "RGB")
+    else:
+        im = TF.to_pil_image(image)
+    im.save(path)

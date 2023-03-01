@@ -9,7 +9,7 @@ from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.checkpointer import Checkpointer
-from video_cv_project.data import create_davis_dataloader
+from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
 from video_cv_project.utils import get_dirs, perf_hack
@@ -60,11 +60,12 @@ def eval(cfg: DictConfig):
 
     encoder.to(device).eval()
 
-    vid_names = dataloader.dataset.videos
-    palette = dataloader.dataset.palette
+    dataset: DAVISDataset = dataloader.dataset  # type: ignore
+    vid_names = dataset.videos
+    has_palette = dataset.has_palette
 
     with torch.inference_mode():
-        for i, (ims, orig_ims, lbls, lbl_cls, meta) in enumerate(dataloader):
+        for i, (ims, lbls, colors, meta) in enumerate(dataloader):
             B, T = ims.shape[:2]
             assert B == 1, "Video batch size must be 1."
 
@@ -90,10 +91,10 @@ def eval(cfg: DictConfig):
 
             dump_vos_preds(
                 save_dir,
-                orig_ims[0, context_len:],
+                meta[0]["im_paths"],
                 preds[0],
-                lbl_cls[0],
-                palette=palette,
+                colors[0],
+                has_palette=has_palette,
                 blend_name=f"blends/{vid_names[i]}/%05d.jpg",
                 mask_name=f"masks/{vid_names[i]}/%05d.png",
             )

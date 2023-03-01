@@ -34,7 +34,7 @@ def calc_context_frame_idx(
     Args:
         num_frames (int): Number of frames in video.
         context_len (int): Number of past frames to use as context.
-        extra_idx (Tuple[int, ...], optional): Extra frames to include in context. Defaults to [].
+        extra_idx (Tuple[int, ...], optional): Extra frames to include in context.
 
     Returns:
         torch.Tensor: TN indexes of context frames for each frame, where T is the current frame & N is each context frame.
@@ -116,9 +116,8 @@ def batched_affinity(
             Is: BTkQ indexes of top-k context pixels for each query pixel.
             Ws: BTkQ affinities of top-k context pixels for each query pixel.
     """
-    # Memory corruption seems to occur even at batch size of 2 for `torch.topk`.
-    # hardcode to 1, ~= 4GB VRAM usage.
     # TODO: Consider implementing original's pixel-level batching.
+    # Hardcode to 1, see below note on issue with `torch.topk`.
     b = 1
     T = keys.shape[2]
     # -1e10 penalty to hard mask pixels outside radius.
@@ -140,6 +139,10 @@ def batched_affinity(
         A = A.flatten(2, 3)
 
         # Indexes of top-k pixels and their affinities.
+        # NOTE: https://github.com/pytorch/pytorch/issues/82569
+        # Bug with `torch.topk` since 1.13.1.
+        # Mitigation: Reduce size of affinity matrix by decreasing batch size,
+        # context length, batching at pixel level, or using sparse matrix.
         weights, idx = torch.topk(A, topk, dim=2)
         weights = F.softmax(weights / temperature, dim=2)
 

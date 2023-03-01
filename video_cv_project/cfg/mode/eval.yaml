@@ -7,7 +7,7 @@ defaults:
 mode: eval
 
 eval:
-  context_len: 20
+  context_len: 5
   topk: 10
   radius: 12
   temperature: 0.05

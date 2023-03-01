@@ -2,18 +2,19 @@
 
 from typing import Callable, List, Sequence, Tuple
 
+import einops as E
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as T
+from einops.layers.torch import Rearrange
 
-from video_cv_project.cfg import RGB, RGB_MEAN, RGB_STD
+from video_cv_project.cfg import RGB_MEAN, RGB_STD
 
 __all__ = [
     "create_train_pipeline",
     "create_pipeline",
     "MapTransform",
     "PatchSplitTransform",
-    "PatchFlattenTransform",
 ]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
@@ -73,37 +74,13 @@ class PatchSplitTransform:
         Returns:
             torch.Tensor: NCHW image patches.
         """
+        h, w = self.size
         x = F.unfold(im, self.size, stride=self.stride)
-        x = x.unflatten(0, (RGB, *self.size))
-        x = x.permute(3, 0, 1, 2)  # NCHW
-        return x
+        return E.rearrange(x, "(c h w) n -> n c h w", h=h, w=w)
 
     def __repr__(self):
         """Return string representation of class."""
         return f"{self.__class__.__name__}(size={self.size}, stride={self.stride})"
-
-
-class PatchFlattenTransform:
-    """Flatten NCHW patches to (N*C)HW."""
-
-    def __init__(self):
-        """Create PatchFlattenTransform."""
-        pass
-
-    def __call__(self, x: torch.Tensor):
-        """Flatten NCHW patches to (N*C)HW.
-
-        Args:
-            x (torch.Tensor): NCHW patches.
-
-        Returns:
-            torch.Tensor: (N*C)HW patches.
-        """
-        return x.flatten(0, 1)
-
-    def __repr__(self):
-        """Return string representation of class."""
-        return f"{self.__class__.__name__}()"
 
 
 class _ToTensor:
@@ -151,7 +128,7 @@ def create_pipeline(
         im += [
             PatchSplitTransform(patch_size, patch_stride),
             MapTransform(*patch),
-            PatchFlattenTransform(),
+            Rearrange("n c h w -> (n c) h w"),
         ]
     else:
         im += [rgb_norm] if do_rgb_norm else []
@@ -190,5 +167,5 @@ def create_train_pipeline(
         *im_transforms,
         PatchSplitTransform(patch_size, patch_stride),
         MapTransform(*patch_transforms),
-        PatchFlattenTransform(),
+        Rearrange("n c h w -> (n c) h w"),
     )

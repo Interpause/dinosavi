@@ -1,5 +1,6 @@
 """Wrapper module that flattens temporal dimension into batch dimension."""
 
+import einops as E
 import torch
 import torch.nn as nn
 
@@ -29,10 +30,7 @@ class VideoWrapper(nn.Module):
         Returns:
             torch.Tensor: BCTHW output temporal latent maps.
         """
-        B = x.shape[0]
-        # BCTHW -> BTCHW -> (B*T)CHW
-        x = x.transpose(1, 2).flatten(0, 1)
-        y: torch.Tensor = self.model(x)  # (B*T)CHW latent maps
-
-        # (B*T)CHW -> BTCHW -> BCTHW
-        return y.unflatten(0, (B, -1)).transpose(1, 2)
+        B = len(x)
+        x = E.rearrange(x, "b c t h w -> (b t) c h w")
+        y: torch.Tensor = self.model(x)
+        return E.rearrange(y, "(b t) c h w -> b c t h w", b=B)

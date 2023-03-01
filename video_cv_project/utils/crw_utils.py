@@ -2,6 +2,7 @@
 
 from functools import cache
 
+import einops as E
 import torch
 import torch.nn.functional as F
 
@@ -18,7 +19,7 @@ def zero_out_diag(x: torch.Tensor):
         torch.Tensor: Tensor with diagonal zeroed out.
     """
     mask = (1 - torch.eye(x.shape[-1])).to(x.device)
-    return torch.einsum("...xy,xy->...xy", x, mask)
+    return x * mask
 
 
 def calc_affinity(feats: torch.Tensor):
@@ -36,7 +37,7 @@ def calc_affinity(feats: torch.Tensor):
         torch.Tensor: BTNM node affinity matrices.
     """
     t0, t1 = feats[:, :, :-1], feats[:, :, 1:]
-    return torch.einsum("bctn,bctm->btnm", t0, t1)  # From t=0 to t-1.
+    return E.einsum(t0, t1, "b c t n, b c t m -> b t n m")  # From t=0 to t-1.
 
 
 def calc_markov(

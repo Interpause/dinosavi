@@ -4,6 +4,7 @@ from functools import cache
 from pathlib import Path
 from typing import List, Tuple
 
+import einops as E
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
@@ -42,22 +43,22 @@ def calc_context_frame_idx(
     Returns:
         torch.Tensor: TN indexes of context frames for each frame, where T is the current frame & N is each context frame.
     """
-    context = [torch.zeros(num_frames, 1, dtype=torch.long)]
+    context = [torch.zeros(num_frames, 1)]
     for t in extra_idx:
         assert 0 <= t < num_frames
         n = context_len + t + 1  # Account for prepended repeats.
         # `idx` specifies whether frame `t` should be included for each frame.
-        idx = torch.full((num_frames, 1), n, dtype=torch.long)
+        idx = torch.full((num_frames, 1), n)
         # The extra frame isn't included for frames before `t`. Due to limitations,
         # when `t` isn't included, frame 0 will be included.
         idx[:n] = 0
         context.append(idx)
 
     # Construct index of context frames for each frame.
-    a = torch.arange(context_len).expand(num_frames, -1)
-    b = torch.arange(num_frames).unsqueeze(1)
+    a = E.repeat(torch.arange(context_len), "n -> t n", t=num_frames)
+    b = E.rearrange(torch.arange(num_frames), "t -> t 1")
     context.append(a + b)
-    return torch.cat(context, dim=1)
+    return torch.cat(context, dim=1).long()
 
 
 @cache
@@ -83,9 +84,9 @@ def create_spatial_mask(height: int, width: int, radius: float):
     mask = (
         (gy[None, None, :, :] - gy[:, :, None, None]) ** 2
         + (gx[None, None, :, :] - gx[:, :, None, None]) ** 2
-    ) ** 0.5  # XYXY
-    # XYXY -> PQ, where P is each pixel & Q is each other pixel.
-    mask = mask.flatten(0, 1).flatten(1, 2)
+    ) ** 0.5
+    # `p` refers to context pixels, `q` refers to query pixels.
+    mask = E.rearrange(mask, "px py qx qy -> (px py) (qx qy)")
     # TODO: Consider "smoothing" the mask?
     return mask > radius
 
@@ -132,14 +133,13 @@ def batched_affinity(
         bq = query[:, t : t + b].to(device)
 
         # TNPQ: P & Q are pixels for each frame, N is each context frame.
-        A = torch.einsum("ctnp,ctq->tnpq", bk, bq)
+        A = E.einsum(bk, bq, "c t n p, c t q -> t n p q")
 
         # Apply spatial mask, skipping frames always included in context.
         A[:, num_extra_frames:] += mask
 
-        # TNPQ -> T(N*P)Q
-        # Q are query pixels (current frame), N*P are context pixels.
-        A = A.flatten(1, 2)
+        # `q` are query pixels, `(n p)` are context pixels.
+        A = E.rearrange(A, "t n p q -> t (n p) q")
 
         # Indexes of top-k pixels and their affinities.
         # NOTE: https://github.com/pytorch/pytorch/issues/82569
@@ -192,26 +192,18 @@ def propagate_labels(
     # Mask labels for frames after the initial frame.
     lbls[context_len:] *= 0
 
-    # TCHW -> CTHW
-    ims = ims.transpose(0, 1)
     # TODO: Don't repeat encode for repeat frames.
-    feats = torch.cat(
-        [encoder(ims[None, :, t : t + b].to(device))[0].cpu() for t in range(0, T, b)],
-        dim=1,
-    )
-    feats = F.normalize(feats, p=2, dim=0)  # Euclidean norm.
+    ims = E.rearrange(ims, "t c h w -> 1 c t h w")
+    bats = [encoder(ims[:, :, t : t + b].to(device))[0].cpu() for t in range(0, T, b)]
+    feats = F.normalize(torch.cat(bats, dim=1), p=2, dim=0)  # Euclidean norm.
 
     # TN, where N is the context frames for each time step T.
     key_idx = calc_context_frame_idx(num_frames, context_len, extra_idx)
-    # CTNHW context frames for each frame.
-    keys = feats[:, key_idx]
-    # CTNHW -> CTN(H*W) context features.
-    keys = keys.flatten(-2)
-    # Remove prepended repeats.
-    query = feats[:, context_len:]
-    # CTHW -> CT(H*W) query frames.
-    query = query.flatten(-2)
-    # PQ, where P is each pixel & Q is each other pixel.
+    # Map of frame at `t` to context pixels `(h w)` for each context frame `n`.
+    keys = E.rearrange(feats[:, key_idx], "c t n h w -> c t n (h w)")
+    # `(h w)` query pixels for each frame `t`; Also remove prepended repeats.
+    query = E.rearrange(feats[:, context_len:], "c t h w -> c t (h w)")
+    # PQ mask, where P are context pixels & Q are query pixels.
     mask = create_spatial_mask(*feats.shape[-2:], radius)
 
     # TkQ indexes, TkQ weights, where k is the top-k context pixels.
@@ -222,28 +214,26 @@ def propagate_labels(
         topk,
         temperature,
         batch_size,
-        len(extra_idx) + 1,
+        len(extra_idx) + 1,  # Add 1 as initial frame is always included.
         device=device,
     )
 
+    _, w = feats.shape[-2:]
     preds = []
     # Frame by frame propagation.
     for t in range(num_frames):
-        # TNHW context labels, where T are context frames & N are label classes.
+        # NLHW context labels, where N are context frames & L are label classes.
         ctx = lbls[key_idx[t]].to(device)
-        # TNHW -> -> NTHW -> N(T*H*W) context pixels.
-        ctx = ctx.transpose(0, 1).flatten(1)
+        ctx = E.rearrange(ctx, "n l h w -> l (n h w)")
         # kQ weights for top-k context pixels.
-        w = weights[t].to(device)
+        c = weights[t].to(device)
 
         # Weighted sum of top-k context pixels.
-        # NQ -> NHW predicted label classes for each query pixel.
-        pred = (ctx[:, topk_idx[t]] * w).sum(1).reshape(-1, *feats.shape[-2:])
+        pred = E.reduce(ctx[:, topk_idx[t]] * c, "l k (h w) -> l h w", "sum", w=w)
 
         # TODO: Original used real labels for frame 0. Is there some reason?
         # Propagate labels.
         lbls[context_len + t] = pred
-
         preds.append(pred.cpu())
     return torch.stack(preds)
 

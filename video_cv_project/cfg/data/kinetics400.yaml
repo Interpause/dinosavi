@@ -8,7 +8,7 @@ mode: kinetics400
 batch_size: 32
 num_workers: 16
 
-cache_path: /home/jovyan/downloads/kinetics400.pt
+cache_path: /home/jovyan/downloads/kinetics400-val.pt
 
 dataset:
   _target_: torchvision.datasets.Kinetics

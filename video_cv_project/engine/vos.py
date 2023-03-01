@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Sequence
 
+import einops as E
 import torch
 import torchvision.transforms.functional as F
 
@@ -49,7 +50,7 @@ def dump_vos_preds(
         lbl = lbl.argmax(dim=0)
 
         # Get colors for each class.
-        color_lbl = colors[lbl].permute(2, 0, 1) / 255.0
+        color_lbl = E.rearrange(colors[lbl], "h w c -> c h w") / 255.0
 
         # Save label.
         save_image(lbl if has_palette else color_lbl, out_dir / f"{mask_name % t}", pal)

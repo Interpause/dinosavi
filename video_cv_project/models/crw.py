@@ -6,7 +6,7 @@ Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b
 from functools import partial
 from typing import Dict, Tuple
 
-import numpy as np
+import einops as E
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -96,24 +96,21 @@ class CRW(nn.Module):
             torch.Tensor: BCTN node features.
         """
         B, N = x.shape[:2]
-        feats: torch.Tensor
-        # BNCTHW -> (B*N)CTHW
-        maps: torch.Tensor = self.encoder(x.flatten(0, 1))
+        x = E.rearrange(x, "b n c t h w -> (b n) c t h w")
+        maps: torch.Tensor = self.encoder(x)
         maps = F.dropout(maps, p=self.feat_dropout, training=self.training)
 
         # Use image latent map as nodes.
         if N == 1:
-            # (B*N)CTHW -> (B*N)HWCT -> (B*N*H*W)CT -> (B*N)CT
-            feats = maps.permute(0, 3, 4, 1, 2).flatten(0, 2)
+            feats = E.rearrange(maps, "b c t h w -> (b h w) c t")
 
         # Each node has its own latent map.
         else:
-            # Pool latent maps: (B*N)CTHW -> (B*N)CT
-            feats = maps.sum((-1, -2)) / np.prod(maps.shape[-2:])
+            # Pool latent maps for each patch.
+            feats = E.reduce(maps, "b c t h w -> b c t", "mean")
 
-        feats = self.head(feats.transpose(-1, -2)).transpose(-1, -2)
-        # (B*N)CT -> BNCT -> BCTN
-        return feats.unflatten(0, (B, -1)).permute(0, 2, 3, 1)
+        feats = self.head(feats.mT).mT
+        return E.rearrange(feats, "(b n) c t -> b c t n", b=B)
 
     def _compute_walks(self, feats: torch.Tensor):
         """Compute walks between nodes.
@@ -146,7 +143,7 @@ class CRW(nn.Module):
         # List of BNM Markov matrices at each time step for transitions from all
         # N to all M in both directions (left & right).
         right = tuple(calc_stoch(As[:, t]) for t in range(T - 1))
-        left = tuple(calc_stoch(As[:, t].transpose(-1, -2)) for t in range(T - 1))
+        left = tuple(calc_stoch(As[:, t].mT) for t in range(T - 1))
 
         # TODO: Can limit min length of sub-cycle palindromes for better training?
         # Include all sub-cycle palindromes.
@@ -182,8 +179,7 @@ class CRW(nn.Module):
         debug = {}
 
         for name, (path, target) in walks.items():
-            # BNM -> (B*N)M
-            logits = (path + EPS).log().flatten(0, 1)
+            logits = E.rearrange((path + EPS).log(), "b n m -> (b n) m")
             loss = F.cross_entropy(logits, target)
             losses.append(loss)
 
@@ -209,8 +205,7 @@ class CRW(nn.Module):
         #   - N=1: Batch of images.
         #   - N>1: Batch of image patches.
 
-        # BT(N*C)HW -> B(N*C)THW -> BNCTHW
-        x = x.transpose(1, 2).unflatten(1, (-1, RGB))
+        x = E.rearrange(x, "b t (n c) h w -> b n c t h w", c=RGB)
         feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks)

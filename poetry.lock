@@ -428,6 +428,18 @@ files = [
 ]
 
 [[package]]
+name = "einops"
+version = "0.6.0"
+description = "A new flavour of deep learning operations"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "einops-0.6.0-py3-none-any.whl", hash = "sha256:c7b187a5dc725f079860ec2d330c1820448948622d826273345a8dd8d5f695bd"},
+    {file = "einops-0.6.0.tar.gz", hash = "sha256:6f6c78739316a2e3ccbce8052310497e69da092935e4173f2e76ec4e3a336a35"},
+]
+
+[[package]]
 name = "executing"
 version = "1.2.0"
 description = "Get the currently executing AST node of a frame, and other information"
@@ -1528,7 +1540,7 @@ opt-einsum = ["opt-einsum (>=3.3)"]
 name = "torchinfo"
 version = "1.7.2"
 description = "Model summary in PyTorch, based off of the original torchsummary."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
@@ -1683,4 +1695,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "fe3ad4a92e26652aad61986f6f76d3b7ed3ff44eb2855d2f40b684d9ce64ede5"
+content-hash = "e63a05b4896f7857be67605dfb11cce9d15c60961638f59e3d47eaa0f23b080c"

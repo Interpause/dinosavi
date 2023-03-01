@@ -83,10 +83,8 @@ class VOSDataset(Dataset):
                 lbls[i] = F.resize(lbl, self.im_size)
 
         lbls = torch.stack(lbls)  # TCHW
-        lbl_sz = (
-            ceil(lbls.shape[-2] / self.map_scale),
-            ceil(lbls.shape[-1] / self.map_scale),
-        )  # H, W
+        h, w = lbls.shape[-2:]
+        lbl_sz = (ceil(h / self.map_scale), ceil(w / self.map_scale))
         lbls = F.resize(lbls, lbl_sz)
 
         ims = self._repeat_context(ims)

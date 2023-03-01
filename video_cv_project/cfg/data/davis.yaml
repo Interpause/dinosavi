@@ -5,8 +5,8 @@ defaults:
   - override transform: base
 
 mode: davis
-batch_size: 1
-num_workers: 0
+batch_size: 4
+num_workers: 1
 
 dataset:
   _target_: video_cv_project.data.DAVISDataset

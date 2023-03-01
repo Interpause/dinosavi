@@ -13,5 +13,6 @@ eval:
   temperature: 0.05
   extra_idx: []
 
-dataset:
-  context_len: ${eval.context_len}
+data:
+  dataset:
+    context_len: ${eval.context_len}

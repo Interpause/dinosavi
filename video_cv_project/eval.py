@@ -1,6 +1,7 @@
 """Model evaluation script."""
 
 import logging
+from time import time
 
 import torch
 from hydra.utils import instantiate
@@ -65,6 +66,7 @@ def eval(cfg: DictConfig):
     has_palette = dataset.has_palette
 
     with torch.inference_mode():
+        t_data, t_infer, t_save = time(), 0.0, 0.0
         for i, (ims, lbls, colors, meta) in enumerate(dataloader):
             B, T = ims.shape[:2]
             assert B == 1, "Video batch size must be 1."
@@ -75,9 +77,11 @@ def eval(cfg: DictConfig):
             log.info(
                 f"{i+1}/{len(dataloader)}: Processing {meta['im_dir']} with {T} frames."
             )
+            log.debug(f"Data: {time() - t_data:.4f} s")
 
             save_dir = out_dir / "results"
 
+            t_infer = time()
             preds = propagate_labels(
                 encoder,
                 ims,
@@ -90,7 +94,9 @@ def eval(cfg: DictConfig):
                 batch_size=cfg.data.batch_size,
                 device=device,
             )
+            log.debug(f"Inference: {time() - t_infer:.4f} s")
 
+            t_save = time()
             dump_vos_preds(
                 save_dir,
                 meta["im_paths"],
@@ -100,3 +106,6 @@ def eval(cfg: DictConfig):
                 blend_name=f"blends/{vid_names[i]}/%05d.jpg",
                 mask_name=f"masks/{vid_names[i]}/%05d.png",
             )
+            log.debug(f"Save: {time() - t_save:.4f} s")
+
+            t_data = time()

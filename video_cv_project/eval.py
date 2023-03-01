@@ -69,9 +69,11 @@ def eval(cfg: DictConfig):
             B, T = ims.shape[:2]
             assert B == 1, "Video batch size must be 1."
 
+            ims, lbls, colors, meta = ims[0], lbls[0], colors[0], meta[0]
+
             # Prepended frames are inferred on & contribute to run time.
             log.info(
-                f"{i+1}/{len(dataloader)}: Processing {meta[0]['im_dir']} with {T} frames."
+                f"{i+1}/{len(dataloader)}: Processing {meta['im_dir']} with {T} frames."
             )
 
             save_dir = out_dir / "results"
@@ -91,9 +93,9 @@ def eval(cfg: DictConfig):
 
             dump_vos_preds(
                 save_dir,
-                meta[0]["im_paths"],
-                preds[0],
-                colors[0],
+                meta["im_paths"],
+                preds,
+                colors,
                 has_palette=has_palette,
                 blend_name=f"blends/{vid_names[i]}/%05d.jpg",
                 mask_name=f"masks/{vid_names[i]}/%05d.png",

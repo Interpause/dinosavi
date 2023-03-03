@@ -41,23 +41,22 @@ def eval(cfg: DictConfig):
     log.debug("Create Model.")
     model: CRW = instantiate(cfg.model)
     encoder = model.encoder
-    log.debug("Create Eval Dataloader.")
-    dataloader = create_davis_dataloader(cfg, model.map_scale)
-
-    checkpointer = Checkpointer(model=model)
-    resume_ckpt = root_dir / cfg.resume
-    checkpointer.load(resume_ckpt)
-    old_cfg = OmegaConf.create(checkpointer.cfg)
-    log.debug(f"Ckpt Config:\n{old_cfg}")
-
-    # TODO: What config values to overwrite?
-
     model_summary = summary(
         encoder, SAMPLE_INPUT, verbose=0, col_width=20, device=device
     )
     model_summary.formatting.layer_name_width = 30
     log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
     log.info(f"Model scale: {model.map_scale}")
+
+    log.debug("Create Eval Dataloader.")
+    dataloader = create_davis_dataloader(cfg, model.map_scale)
+
+    checkpointer = Checkpointer(model=model)
+    resume_ckpt = root_dir / cfg.resume
+    checkpointer.load(resume_ckpt)
+    # TODO: What config values to overwrite?
+    old_cfg = OmegaConf.create(checkpointer.cfg)
+    log.debug(f"Ckpt Config:\n{old_cfg}")
 
     encoder.to(device).eval()
 

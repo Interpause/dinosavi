@@ -11,6 +11,7 @@
       "module": "video_cv_project",
       "justMyCode": true,
       "args": ["mode=eval", "resume=latest.ckpt"],
+      // "args": ["mode=train"],
       "env": {
         "CUDA_LAUNCH_BLOCKING": "1"
       }

@@ -43,6 +43,10 @@ def train(cfg: DictConfig):
 
     log.debug("Create Model.")
     model = instantiate(cfg.model)
+    model_summary = summary(model, SAMPLE_INPUT, verbose=0, col_width=20, device=device)
+    model_summary.formatting.layer_name_width = 30
+    log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
+
     log.debug("Create Optimizer.")
     optimizer = instantiate(cfg.train.optimizer, model.parameters())
     log.debug("Create Scheduler.")
@@ -65,10 +69,6 @@ def train(cfg: DictConfig):
         cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
         log.debug(f"Ckpt Config:\n{cfg}")
-
-    model_summary = summary(model, SAMPLE_INPUT, verbose=0, col_width=20, device=device)
-    model_summary.formatting.layer_name_width = 30
-    log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
 
     model.to(device).train()
 

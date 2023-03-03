@@ -8,8 +8,8 @@ import torch.nn as nn
 class VideoWrapper(nn.Module):
     """Wrapper that flattens temporal dimension into batch dimension.
 
-    The wrapper converts BCTHW input to (B*T)CHW to feed to standard image models.
-    Afterwards, the latent maps output by the image model is converted back to BCTHW.
+    The wrapper converts BTCHW input to (B*T)CHW to feed to standard image models.
+    Afterwards, the latent maps output by the image model is converted back to BTCHW.
     """
 
     def __init__(self, model: nn.Module):
@@ -25,12 +25,12 @@ class VideoWrapper(nn.Module):
         """Forward pass.
 
         Args:
-            x (torch.Tensor): BCTHW input video.
+            x (torch.Tensor): BTCHW input video.
 
         Returns:
-            torch.Tensor: BCTHW output temporal latent maps.
+            torch.Tensor: BTCHW output temporal latent maps.
         """
         B = len(x)
-        x = E.rearrange(x, "b c t h w -> (b t) c h w")
+        x = E.rearrange(x, "b t c h w -> (b t) c h w")
         y: torch.Tensor = self.model(x)
-        return E.rearrange(y, "(b t) c h w -> b c t h w", b=B)
+        return E.rearrange(y, "(b t) c h w -> b t c h w", b=B)

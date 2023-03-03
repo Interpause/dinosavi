@@ -75,11 +75,7 @@ def create_spatial_mask(height: int, width: int, radius: float):
     Returns:
         torch.Tensor: PQ bitmask, where the value is True if masked.
     """
-    gy, gx = torch.meshgrid(
-        torch.arange(height, dtype=torch.float),
-        torch.arange(width, dtype=torch.float),
-        indexing="ij",
-    )
+    gy, gx = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
     # For each pixel, calculate distance to all other pixels.
     mask = (
         (gy[None, None, :, :] - gy[:, :, None, None]) ** 2
@@ -106,8 +102,8 @@ def batched_affinity(
     Affinities are later used as weights during label propagation.
 
     Args:
-        query (torch.Tensor): CTQ query pixels.
-        keys (torch.Tensor): CTNP context pixels.
+        query (torch.Tensor): TCQ query pixels.
+        keys (torch.Tensor): TNCP context pixels.
         mask (torch.Tensor): PQ bitmask, where the value is True if masked.
         topk (int): Top-k pixels to use for label propagation.
         temperature (float): Temperature for softmax.
@@ -123,17 +119,16 @@ def batched_affinity(
     # TODO: Consider implementing original's pixel-level batching.
     # Hardcode to 1, see below note on issue with `torch.topk`.
     b = 1
-    T = keys.shape[1]
     # -1e10 penalty to hard mask pixels outside radius.
     mask = (mask * -1e10).to(device)
 
     Is, Ws = [], []
-    for t in range(0, T, b):
-        bk = keys[:, t : t + b].to(device)
-        bq = query[:, t : t + b].to(device)
+    for t in range(0, len(keys), b):
+        bk = keys[t : t + b].to(device)
+        bq = query[t : t + b].to(device)
 
         # TNPQ: P & Q are pixels for each frame, N is each context frame.
-        A = E.einsum(bk, bq, "c t n p, c t q -> t n p q")
+        A = E.einsum(bk, bq, "t n c p, t c q -> t n p q")
 
         # Apply spatial mask, skipping frames always included in context.
         A[:, num_extra_frames:] += mask
@@ -193,16 +188,16 @@ def propagate_labels(
     lbls[context_len:] *= 0
 
     # TODO: Don't repeat encode for repeat frames.
-    ims = E.rearrange(ims, "t c h w -> 1 c t h w")
-    bats = [encoder(ims[:, :, t : t + b].to(device))[0].cpu() for t in range(0, T, b)]
-    feats = F.normalize(torch.cat(bats, dim=1), p=2, dim=0)  # Euclidean norm.
+    ims = E.rearrange(ims, "t c h w -> 1 t c h w")  # Add fake batch dim.
+    bats = [encoder(ims[:, t : t + b].to(device)).cpu() for t in range(0, T, b)]
+    feats = F.normalize(torch.cat(bats, dim=1), p=2, dim=2)[0]  # Euclidean norm.
 
     # TN, where N is the context frames for each time step T.
     key_idx = calc_context_frame_idx(num_frames, context_len, extra_idx)
     # Map of frame at `t` to context pixels `(h w)` for each context frame `n`.
-    keys = E.rearrange(feats[:, key_idx], "c t n h w -> c t n (h w)")
+    keys = E.rearrange(feats[key_idx], "t n c h w -> t n c (h w)")
     # `(h w)` query pixels for each frame `t`; Also remove prepended repeats.
-    query = E.rearrange(feats[:, context_len:], "c t h w -> c t (h w)")
+    query = E.rearrange(feats[context_len:], "t c h w -> t c (h w)")
     # PQ mask, where P are context pixels & Q are query pixels.
     mask = create_spatial_mask(*feats.shape[-2:], radius)
 

@@ -67,10 +67,10 @@ class CRW(nn.Module):
         """
         super(CRW, self).__init__()
 
-        # Arbitrary BCTHW input is fine.
+        # Arbitrary BTCHW input is fine.
         sz = 256
-        enc_dim = infer_outdim(encoder, (1, RGB, 1, sz, sz), device=device)
-        self.enc_channels = enc_dim[1]  # Encoder output channels.
+        enc_dim = infer_outdim(encoder, (1, 1, RGB, sz, sz), device=device)
+        self.enc_channels = enc_dim[2]  # Encoder output channels.
         self.map_scale = sz // enc_dim[-1]  # Downscale factor of latent map.
 
         self.encoder = encoder
@@ -90,33 +90,33 @@ class CRW(nn.Module):
         the number of patches N is 1 or greater than 1.
 
         Args:
-            x (torch.Tensor): BNCTHW images or image patches.
+            x (torch.Tensor): BNTCHW images or image patches.
 
         Returns:
-            torch.Tensor: BCTN node features.
+            torch.Tensor: BTNC node features.
         """
         B, N = x.shape[:2]
-        x = E.rearrange(x, "b n c t h w -> (b n) c t h w")
+        x = E.rearrange(x, "b n t c h w -> (b n) t c h w")
         maps: torch.Tensor = self.encoder(x)
         maps = F.dropout(maps, p=self.feat_dropout, training=self.training)
 
         # Use image latent map as nodes.
         if N == 1:
-            feats = E.rearrange(maps, "b c t h w -> (b h w) c t")
+            feats = E.rearrange(maps, "b t c h w -> (b h w) t c")
 
         # Each node has its own latent map.
         else:
             # Pool latent maps for each patch.
-            feats = E.reduce(maps, "b c t h w -> b c t", "mean")
+            feats = E.reduce(maps, "b t c h w -> b t c", "mean")
 
-        feats = self.head(feats.mT).mT
-        return E.rearrange(feats, "(b n) c t -> b c t n", b=B)
+        feats = self.head(feats)
+        return E.rearrange(feats, "(b n) t c -> b t n c", b=B)
 
     def _compute_walks(self, feats: torch.Tensor):
         """Compute walks between nodes.
 
         Args:
-            feats (torch.Tensor): BCTN node features.
+            feats (torch.Tensor): BTNC node features.
 
         Returns:
             Dict[str, Tuple[torch.Tensor, torch.Tensor]]: Map of sub-cycle palindromes
@@ -127,7 +127,7 @@ class CRW(nn.Module):
         """
         walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]] = {}
 
-        T = feats.shape[2]
+        T = feats.shape[1]
 
         calc_stoch = partial(
             calc_markov,
@@ -199,13 +199,13 @@ class CRW(nn.Module):
             x (torch.Tensor): BT(N*C)HW input images or image patches.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor, dict]: BCTN node features, loss, and debug info.
+            Tuple[torch.Tensor, torch.Tensor, dict]: BTNC node features, loss, and debug info.
         """
         # Input is BT(N*C)HW where:
         #   - N=1: Batch of images.
         #   - N>1: Batch of image patches.
 
-        x = E.rearrange(x, "b t (n c) h w -> b n c t h w", c=RGB)
+        x = E.rearrange(x, "b t (n c) h w -> b n t c h w", c=RGB)
         feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks)

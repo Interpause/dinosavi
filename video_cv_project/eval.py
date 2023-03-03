@@ -21,7 +21,7 @@ CKPT_FOLDER = "weights"
 CKPT_EXT = ".ckpt"
 LATEST_NAME = f"latest{CKPT_EXT}"
 MODEL_NAME = f"epoch%d{CKPT_EXT}"
-SAMPLE_INPUT = [1, 3, 8, 320, 320]
+SAMPLE_INPUT = [1, 8, 3, 320, 320]
 
 
 def eval(cfg: DictConfig):

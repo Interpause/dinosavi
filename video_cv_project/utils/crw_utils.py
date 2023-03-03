@@ -31,13 +31,13 @@ def calc_affinity(feats: torch.Tensor):
     Affinity is actually cosine similarity.
 
     Args:
-        feats (torch.Tensor): BCTN node features.
+        feats (torch.Tensor): BTNC node features.
 
     Returns:
         torch.Tensor: BTNM node affinity matrices.
     """
-    t0, t1 = feats[:, :, :-1], feats[:, :, 1:]
-    return E.einsum(t0, t1, "b c t n, b c t m -> b t n m")  # From t=0 to t-1.
+    t0, t1 = feats[:, :-1], feats[:, 1:]
+    return E.einsum(t0, t1, "b t n c, b t m c -> b t n m")  # From t=0 to t-1.
 
 
 def calc_markov(

@@ -121,13 +121,16 @@ class EncoderWithGRU(nn.Module):
         Returns:
             torch.Tensor: BTCHW output temporal memory maps.
         """
+        x = self.encoder(x)
         if self.training or (
             self.hidden is not None
             and self.reset_hidden
-            and x[:, 0].shape != self.hidden[0].shape
+            and x[:, 0, 0].shape != self.hidden[0][:, 0].shape
         ):
+            # Both training & evaluation code keeps the shape constant, but below
+            # serves as check anyways.
+            # print("EncoderWithGRU: Resetting hidden state.")
             self.reset()
-        x = self.encoder(x)
         y, self.hidden = self.rnn(x, self.hidden)
         return y
 

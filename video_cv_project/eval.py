@@ -80,6 +80,11 @@ def eval(cfg: DictConfig):
 
             save_dir = out_dir / "results"
 
+            # Reset hidden state of encoder (if present).
+            if hasattr(encoder, "reset"):
+                log.debug("Reset Encoder.")
+                encoder.reset()  # type: ignore
+
             t_infer = time()
             preds = propagate_labels(
                 encoder,

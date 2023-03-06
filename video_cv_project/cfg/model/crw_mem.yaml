@@ -7,7 +7,8 @@ encoder:
   encoder:
     _target_: video_cv_project.models.encoders.create_resnet_encoder
     name: resnet18
-    del_layers: [layer4]
+    weights: null
+    # del_layers: [layer4]
   hid_dim: 256
   size: 3
   depth: 1

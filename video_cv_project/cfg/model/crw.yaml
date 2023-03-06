@@ -4,7 +4,8 @@ _target_: video_cv_project.models.CRW
 encoder:
   _target_: video_cv_project.models.encoders.create_resnet_encoder
   name: resnet18
-  del_layers: [layer4]
+  weights: null
+  # del_layers: [layer4]
 edge_dropout: 0.0
 feat_dropout: 0.0
 temperature: 0.05

@@ -1,6 +1,7 @@
 """Model training script."""
 
 import logging
+import signal
 
 import torch
 from hydra.utils import instantiate
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 CKPT_FOLDER = "weights"
 CKPT_EXT = ".ckpt"
 LATEST_NAME = f"latest{CKPT_EXT}"
+INTERRUPT_NAME = f"interrupted{CKPT_EXT}"
 MODEL_NAME = f"epoch%d{CKPT_EXT}"
 SAMPLE_INPUT = [1, 8, 147, 64, 64]
 
@@ -72,6 +74,15 @@ def train(cfg: DictConfig):
 
     model.to(device).train()
 
+    is_interrupted = False
+
+    def set_interrupted(sig, frame):
+        nonlocal is_interrupted
+        log.info("Waiting for current batch to finish.")
+        is_interrupted = True
+
+    signal.signal(signal.SIGINT, set_interrupted)
+
     with iter_pbar:
         log.info(f"Start training for {epochs} epochs.")
         epochtask = iter_pbar.add_task("Epoch", total=epochs, status="")
@@ -92,6 +103,13 @@ def train(cfg: DictConfig):
 
                 if n % log_every == 0 or n == len(dataloader):
                     log.info(f"Iteration: {n}/{len(dataloader)}, {status}")
+
+                if is_interrupted:
+                    checkpointer.save(ckpt_dir / INTERRUPT_NAME)
+                    cont = input("Continue training (Y/n)? ")
+                    if cont.lower().strip() == "n":
+                        raise KeyboardInterrupt
+                    is_interrupted = False
 
             scheduler.step()
             checkpointer.epoch += 1

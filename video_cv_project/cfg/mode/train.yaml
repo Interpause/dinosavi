@@ -10,6 +10,7 @@ train:
   epochs: 3
 
   log_every: 20
+  save_every: 500
 
   optimizer:
     _target_: torch.optim.Adam

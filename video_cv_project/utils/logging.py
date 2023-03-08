@@ -11,8 +11,9 @@ from rich.progress import (
     SpinnerColumn,
     TimeRemainingColumn,
 )
+from rich.prompt import Confirm
 
-__all__ = ["pretty", "get_dirs", "iter_pbar"]
+__all__ = ["pretty", "get_dirs", "iter_pbar", "confirm_ask"]
 
 
 class TaskSpeed(ProgressColumn):
@@ -40,4 +41,13 @@ iter_pbar = Progress(
     TaskSpeed(),
     TimeRemainingColumn(elapsed_when_finished=True),
     "{task.fields[status]}",
+    transient=True,
 )
+
+
+def confirm_ask(*args, pbar=iter_pbar, **kwargs):
+    """Workaround to stop prompt from getting overwritten by progress bar."""
+    pbar.stop()
+    res = Confirm.ask(*args, **kwargs)
+    pbar.start()
+    return res

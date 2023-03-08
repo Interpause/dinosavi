@@ -1,7 +1,6 @@
 """Model training script."""
 
 import logging
-import signal
 
 import torch
 from hydra.utils import instantiate
@@ -9,22 +8,18 @@ from omegaconf import DictConfig, OmegaConf
 from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
-from video_cv_project.checkpointer import Checkpointer
 from video_cv_project.data import create_kinetics_dataloader
-from video_cv_project.utils import get_dirs, iter_pbar, perf_hack
+from video_cv_project.engine import Checkpointer, Trainer
+from video_cv_project.utils import get_dirs, perf_hack
 
 log = logging.getLogger(__name__)
 
 CKPT_FOLDER = "weights"
 CKPT_EXT = ".ckpt"
-LATEST_NAME = f"latest{CKPT_EXT}"
-INTERRUPT_NAME = f"interrupted{CKPT_EXT}"
-MODEL_NAME = f"epoch%d{CKPT_EXT}"
+MODEL_NAME = f"epoch%d_%d{CKPT_EXT}"
 SAMPLE_INPUT = [1, 8, 147, 64, 64]
 
 # TODO: Do smth with debug data like visualize.
-# TODO: Tensorboard. Other per iteration logging (maybe epoch logging too?) should
-# be handled by custom iterator.
 # TODO: More metadata about input mode like patch size, number of patches, shape, etc.
 # TODO: Distributed training wait who am i kidding.
 
@@ -39,6 +34,7 @@ def train(cfg: DictConfig):
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     epochs = cfg.train.epochs
     log_every = cfg.train.log_every
+    save_every = cfg.train.save_every
 
     log.info(f"Torch Device: {device}")
     log.info(f"Epochs: {epochs}")
@@ -81,46 +77,26 @@ def train(cfg: DictConfig):
 
     model.to(device).train()
 
-    is_interrupted = False
+    trainer = Trainer(
+        dataloader,
+        epochs,
+        logger=log,
+        log_every=log_every,
+        save_func=lambda i, n: checkpointer.save(
+            ckpt_dir / (MODEL_NAME % (checkpointer.epoch, n))
+        ),
+        save_every=save_every,
+    )
 
-    def set_interrupted(sig, frame):
-        nonlocal is_interrupted
-        log.info("Waiting for current batch to finish.")
-        is_interrupted = True
+    ini_epoch = checkpointer.epoch
+    log.info(f"Start training for {epochs} epochs.")
+    for i, n, video in trainer:
+        _, loss, debug = model(video.to(device))
 
-    signal.signal(signal.SIGINT, set_interrupted)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+        checkpointer.epoch = ini_epoch + i
 
-    with iter_pbar:
-        log.info(f"Start training for {epochs} epochs.")
-        epochtask = iter_pbar.add_task("Epoch", total=epochs, status="")
-
-        for i in range(epochs):
-            log.info(f"Epoch: {i+1}/{epochs}")
-            itertask = iter_pbar.add_task("Iteration", total=len(dataloader), status="")
-
-            for n, video in enumerate(dataloader, start=1):
-                _, loss, debug = model(video.to(device))
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                status = f"Loss: {loss:.6g}, LR: {optimizer.param_groups[0]['lr']:.3g}"
-                iter_pbar.update(itertask, advance=1, status=status)
-
-                if n % log_every == 0 or n == len(dataloader):
-                    log.info(f"Iteration: {n}/{len(dataloader)}, {status}")
-
-                if is_interrupted:
-                    checkpointer.save(ckpt_dir / INTERRUPT_NAME)
-                    cont = input("Continue training (Y/n)? ")
-                    if cont.lower().strip() == "n":
-                        raise KeyboardInterrupt
-                    is_interrupted = False
-
-            scheduler.step()
-            checkpointer.epoch += 1
-            checkpointer.save(ckpt_dir / (MODEL_NAME % checkpointer.epoch))
-            checkpointer.save(ckpt_dir / LATEST_NAME)
-
-            iter_pbar.update(epochtask, advance=1)
+        trainer.update(loss=loss, lr=optimizer.param_groups[0]["lr"])

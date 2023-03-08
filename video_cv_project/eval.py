@@ -9,18 +9,13 @@ from omegaconf import DictConfig, OmegaConf
 from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
-from video_cv_project.checkpointer import Checkpointer
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
-from video_cv_project.engine import dump_vos_preds, propagate_labels
+from video_cv_project.engine import Checkpointer, dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
 from video_cv_project.utils import get_dirs, perf_hack
 
 log = logging.getLogger(__name__)
 
-CKPT_FOLDER = "weights"
-CKPT_EXT = ".ckpt"
-LATEST_NAME = f"latest{CKPT_EXT}"
-MODEL_NAME = f"epoch%d{CKPT_EXT}"
 SAMPLE_INPUT = [1, 8, 3, 320, 320]
 
 
@@ -29,8 +24,6 @@ def eval(cfg: DictConfig):
     assert cfg.resume is not None, "Must provide resume path in eval mode."
 
     root_dir, out_dir = get_dirs()
-    ckpt_dir = out_dir / CKPT_FOLDER
-    ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.
 
     perf_hack()
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)

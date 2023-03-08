@@ -8,6 +8,8 @@ import torch.nn as nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
+__all__ = ["Checkpointer"]
+
 log = logging.getLogger(__name__)
 
 

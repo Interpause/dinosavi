@@ -15,8 +15,7 @@ from video_cv_project.utils import get_dirs, perf_hack
 log = logging.getLogger(__name__)
 
 CKPT_FOLDER = "weights"
-CKPT_EXT = ".ckpt"
-MODEL_NAME = f"epoch%d_%d{CKPT_EXT}"
+MODEL_NAME = f"epoch%d_%d.ckpt"
 SAMPLE_INPUT = [1, 8, 147, 64, 64]
 
 # TODO: Do smth with debug data like visualize.
@@ -50,14 +49,16 @@ def train(cfg: DictConfig):
 
     log.debug("Create Optimizer.")
     optimizer = instantiate(cfg.train.optimizer, model.parameters())
+    log.info(f"Optimizer:\n{optimizer}")
 
     log.debug("Create Scheduler.")
-    total = len(dataloader) * epochs
-    cfg.train.scheduler.milestones = [
-        int(total * m) for m in cfg.train.scheduler.milestones
-    ]
-    log.debug(f"Total: {total}, Milestones: {cfg.train.scheduler.milestones}")
+    if hasattr(cfg.train.scheduler, "milestones"):
+        total = len(dataloader) * epochs
+        cfg.train.scheduler.milestones = [
+            int(total * m) for m in cfg.train.scheduler.milestones
+        ]
     scheduler = instantiate(cfg.train.scheduler, optimizer)
+    log.info(f"Scheduler:\n{scheduler.state_dict()}")
 
     checkpointer = Checkpointer(
         model=model,
@@ -93,10 +94,10 @@ def train(cfg: DictConfig):
     for i, n, video in trainer:
         _, loss, debug = model(video.to(device))
 
+        trainer.update(loss=float(loss), lr=float(scheduler.get_last_lr()[0]))
+        checkpointer.epoch = ini_epoch + i
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         scheduler.step()
-        checkpointer.epoch = ini_epoch + i
-
-        trainer.update(loss=loss, lr=optimizer.param_groups[0]["lr"])

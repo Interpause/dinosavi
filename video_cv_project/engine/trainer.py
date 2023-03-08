@@ -13,6 +13,8 @@ __all__ = ["Trainer"]
 
 log = logging.getLogger(__name__)
 
+TENSORBOARD_DIR = "tensorboard"
+
 
 class Trainer:
     """Handles iterating dataloader and logging."""
@@ -39,7 +41,7 @@ class Trainer:
         self._etask = pbar.add_task("Epoch", total=epochs, status="")
         self._itask = pbar.add_task("Iteration", total=len(dataloader), status="")
         self._stat: dict = dict(epoch=0, iteration=0)
-        self._tbwriter = SummaryWriter(log_dir="tensorboard")
+        self._tbwriter = SummaryWriter(log_dir=TENSORBOARD_DIR)
 
     def __iter__(self):
         """Iterate over dataloader.

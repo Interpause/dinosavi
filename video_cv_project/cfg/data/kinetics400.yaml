@@ -5,7 +5,7 @@ defaults:
   - override transform: train
 
 mode: kinetics400
-batch_size: 32
+batch_size: 16
 num_workers: 16
 
 cache_path: /home/jovyan/downloads/kinetics400-val.pt
@@ -17,11 +17,11 @@ dataset:
   num_classes: '400'
   split: val
   frame_rate: 8
-  step_between_clips: 16
+  step_between_clips: 4
   num_workers: ${..num_workers}
   num_download_workers: ${..num_workers}
   output_format: TCHW
 
 sampler:
   _target_: torchvision.datasets.samplers.RandomClipSampler
-  max_clips_per_video: 3
+  max_clips_per_video: 5

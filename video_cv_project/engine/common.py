@@ -118,7 +118,7 @@ def batched_affinity(
     """
     # TODO: Consider implementing original's pixel-level batching.
     # Hardcode to 1, see below note on issue with `torch.topk`.
-    b = 1
+    b = 1  # batch_size
     # -1e10 penalty to hard mask pixels outside radius.
     mask = (mask * -1e10).to(device)
 
@@ -141,6 +141,7 @@ def batched_affinity(
         # Bug with `torch.topk` since 1.13.1.
         # Mitigation: Reduce size of affinity matrix by decreasing batch size,
         # context length, batching at pixel level, or using sparse matrix.
+        # Alternatively, use PyTorch 2.0.
         weights, idx = A.topk(topk, dim=1)
         weights = F.softmax(weights / temperature, dim=1)
 

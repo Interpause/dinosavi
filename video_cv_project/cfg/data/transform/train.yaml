@@ -19,17 +19,17 @@ im_transforms:
   - _target_: torchvision.transforms.Resize
     size: ${...im_size}
     interpolation: ${...interpolation}
-  # - _target_: torchvision.transforms.ColorJitter
-  #   brightness: 0.1
-  #   contrast: 0.1
-  #   saturation: 0.1
-  #   hue: 0
+  - _target_: torchvision.transforms.ColorJitter
+    brightness: 0.05
+    contrast: 0.05
+    saturation: 0
+    hue: 0
 
 patch_transforms:
   - _target_: torchvision.transforms.ToPILImage
-  # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
+  # Spatial jitter from paper.
   - _target_: torchvision.transforms.RandomResizedCrop
     size: ${...patch_size}
-    scale: [0.8, 0.95]
-    ratio: [0.9, 1.1]
+    scale: [0.75, 0.95]
+    ratio: [0.85, 1.15]
     interpolation: ${...interpolation}

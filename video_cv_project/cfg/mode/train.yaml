@@ -17,8 +17,8 @@ train:
 
   scheduler:
     _target_: torch.optim.lr_scheduler.MultiStepLR
-    milestones: [1, 2]
-    gamma: 0.1
+    milestones: [0.7, 0.8, 0.9]
+    gamma: 0.5
 
 model:
   edge_dropout: 0.1

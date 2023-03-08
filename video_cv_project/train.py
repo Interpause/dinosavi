@@ -49,12 +49,19 @@ def train(cfg: DictConfig):
     model_summary.formatting.layer_name_width = 30
     log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
 
-    log.debug("Create Optimizer.")
-    optimizer = instantiate(cfg.train.optimizer, model.parameters())
-    log.debug("Create Scheduler.")
-    scheduler = instantiate(cfg.train.scheduler, optimizer)
     log.debug("Create Train Dataloader.")
     dataloader = create_kinetics_dataloader(cfg)
+
+    log.debug("Create Optimizer.")
+    optimizer = instantiate(cfg.train.optimizer, model.parameters())
+
+    log.debug("Create Scheduler.")
+    total = len(dataloader) * epochs
+    cfg.train.scheduler.milestones = [
+        int(total * m) for m in cfg.train.scheduler.milestones
+    ]
+    log.debug(f"Total: {total}, Milestones: {cfg.train.scheduler.milestones}")
+    scheduler = instantiate(cfg.train.scheduler, optimizer)
 
     checkpointer = Checkpointer(
         model=model,

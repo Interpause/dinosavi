@@ -56,6 +56,7 @@ class Trainer:
                 return
             nonlocal is_interrupted
             is_interrupted = True
+            log.debug("Interrupt Point:", stack_info=frame, stacklevel=2)
             if confirm_ask(
                 "Interrupt immediately (or wait for current batch)?",
                 default=False,
@@ -64,8 +65,7 @@ class Trainer:
                 self.save_func(self._stat["epoch"], self._stat["iteration"])
                 raise KeyboardInterrupt
 
-        orig_handler = signal.getsignal(signal.SIGINT)
-        signal.signal(signal.SIGINT, set_interrupted)
+        orig_handler = signal.signal(signal.SIGINT, set_interrupted)
 
         try:
             self.pbar.start()

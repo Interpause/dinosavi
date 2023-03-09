@@ -5,7 +5,7 @@ defaults:
   - base
 
 do_patches: true
-im_size: [256, 256]
+im_size: [384, 384]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
 
@@ -19,11 +19,11 @@ im_transforms:
   - _target_: torchvision.transforms.Resize
     size: ${...im_size}
     interpolation: ${...interpolation}
-  - _target_: torchvision.transforms.ColorJitter
-    brightness: 0.05
-    contrast: 0.05
-    saturation: 0
-    hue: 0
+  # - _target_: torchvision.transforms.ColorJitter
+  #   brightness: 0.05
+  #   contrast: 0.05
+  #   saturation: 0
+  #   hue: 0
 
 patch_transforms:
   - _target_: torchvision.transforms.ToPILImage

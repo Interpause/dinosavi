@@ -125,7 +125,7 @@ class Trainer:
             else:
                 stats.append(f"{k}: {v}")
         stat_str = ", ".join(stats)
-        self.pbar.update(self._itask, status=stat_str)
+        self.pbar.update(self._itask, status=f"{stat_str[:40]}")
 
         if n % self.log_every == 0 or n == len(self.dataloader):
             self._tbwriter.flush()

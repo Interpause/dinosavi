@@ -227,7 +227,6 @@ def propagate_labels(
         # Weighted sum of top-k context pixels.
         pred = E.reduce(ctx[:, topk_idx[t]] * c, "l k (h w) -> l h w", "sum", w=w)
 
-        # TODO: Original used real labels for frame 0. Is there some reason?
         # Propagate labels.
         lbls[context_len + t] = pred
         preds.append(pred.cpu())

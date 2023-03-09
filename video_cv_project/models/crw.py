@@ -159,7 +159,7 @@ class CRW(nn.Module):
             # NOTE: I removed walking to the left since it was marked as "bug" in
             # the original's argument.py.
             B, N, _ = path.shape
-            walks[f"cyc r{i}"] = (path, create_crw_target(B, N, path.device))
+            walks[f"cyc_r{i}"] = (path, create_crw_target(B, N, path.device))
 
         return walks
 
@@ -184,11 +184,9 @@ class CRW(nn.Module):
             losses.append(loss)
 
             # TODO: Adding logits to debug might be useful for visualization.
-            debug[name] = {
-                "loss": float(loss),
-                "accuracy": float(logits.argmax(-1).eq(target).float().mean()),
-                "patches": path.shape[1],
-            }
+            debug[f"{name}/loss"] = float(loss)
+            debug[f"{name}/acc"] = float(logits.argmax(-1).eq(target).float().mean())
+            debug[f"{name}/N"] = path.shape[1]
 
         return torch.stack(losses).mean(), debug
 

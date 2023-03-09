@@ -59,11 +59,13 @@ class Checkpointer:
         self.cfg.clear()
         self.cfg.update(ckpt["cfg"])
 
-    def load(self, path):
+    def load(self, path, ignore_keys=[]):
         """Load state in place."""
         if not self.quiet:
             log.info(f"Loading checkpoint: {path}")
         ckpt = torch.load(path, map_location="cpu")
+        for key in ignore_keys:
+            ckpt[key] = None
         self._load(ckpt)
         self.prev_ckpt = ckpt
 

@@ -2,6 +2,7 @@
 
 import logging
 
+import numpy as np
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
@@ -18,7 +19,6 @@ CKPT_FOLDER = "weights"
 MODEL_NAME = f"epoch%d_%d.ckpt"
 SAMPLE_INPUT = [1, 8, 147, 64, 64]
 
-# TODO: Do smth with debug data like visualize.
 # TODO: More metadata about input mode like patch size, number of patches, shape, etc.
 # TODO: Distributed training wait who am i kidding.
 
@@ -71,7 +71,9 @@ def train(cfg: DictConfig):
     # Or some system to specify that?
     if cfg.resume:
         resume_ckpt = root_dir / cfg.resume
-        checkpointer.load(resume_ckpt)
+
+        # TODO: Investigate impact of throwing away optimizer and scheduler state.
+        checkpointer.load(resume_ckpt, ignore_keys=["optimizer", "lr_scheduler"])
         cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
         log.debug(f"Ckpt Config:\n{cfg}")
@@ -94,7 +96,10 @@ def train(cfg: DictConfig):
     for i, n, video in trainer:
         _, loss, debug = model(video.to(device))
 
-        trainer.update(loss=float(loss), lr=float(scheduler.get_last_lr()[0]))
+        avg_acc = np.mean([v for k, v in debug.items() if "acc" in k])  # type: ignore
+        trainer.update(
+            loss=float(loss), acc=avg_acc, lr=float(scheduler.get_last_lr()[0]), **debug
+        )
         checkpointer.epoch = ini_epoch + i
 
         optimizer.zero_grad()

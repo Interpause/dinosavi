@@ -49,7 +49,7 @@ class CRW(nn.Module):
         encoder: nn.Module,
         edge_dropout: float = 0.0,
         feat_dropout: float = 0.0,
-        temperature: float = 0.07,
+        temperature: float = 0.05,
         head_depth: int = 1,
         num_feats: int = 128,
         device=BEST_DEVICE,
@@ -183,14 +183,16 @@ class CRW(nn.Module):
             logits = E.rearrange(path, "b n m -> (b n) m")
             # NOTE: Fixed incorrect cross entropy here:
             # https://github.com/ajabri/videowalk/issues/29
-            # TODO: Below can use `label_smoothing` kwarg to smooth target.
+            # NOTE: Below can use `label_smoothing` kwarg to smooth target.
+            # See: https://arxiv.org/abs/1906.02629
+            # Ideally should smooth target spatially rather than uniformly however.
             loss = F.cross_entropy(logits, target)
             losses.append(loss)
 
             # TODO: Adding logits to debug might be useful for visualization.
             debug[f"loss/{name}"] = float(loss)
             debug[f"acc/{name}"] = float(logits.argmax(-1).eq(target).float().mean())
-            debug[f"N/{name}"] = path.shape[2]
+        debug[f"N"] = path.shape[2]
 
         return torch.stack(losses).mean(), debug
 

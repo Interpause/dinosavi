@@ -13,7 +13,7 @@ __all__ = ["Trainer"]
 
 log = logging.getLogger(__name__)
 
-TENSORBOARD_DIR = "tensorboard"
+TENSORBOARD_DIR = "."
 
 
 class Trainer:

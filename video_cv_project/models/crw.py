@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from video_cv_project.cfg import BEST_DEVICE, EPS, RGB
+from video_cv_project.cfg import BEST_DEVICE, RGB
 from video_cv_project.utils import (
     calc_affinity,
     calc_markov,
@@ -145,19 +145,20 @@ class CRW(nn.Module):
         right = tuple(calc_stoch(As[:, t]) for t in range(T - 1))
         left = tuple(calc_stoch(As[:, t].mT) for t in range(T - 1))
 
-        # TODO: Can limit min length of sub-cycle palindromes for better training?
         # Include all sub-cycle palindromes.
-        for i in range(1, T - 1):
+        for i in range(T - 1):
             # List of BNM Markov matrices forming a palindrome, e.g., a->b->a.
             # NOTE: Original seems to have a bug, a->b->a is skipped. Instead it
-            # starts at a->b->c->b->a. I have opted to keep it in for now.
+            # starts at a->b->c->b->a. I have opted to remove it.
+            # Author kept the bug because it was always there:
+            # https://github.com/ajabri/videowalk/issues/21
             edges = right[: i + 1] + left[i::-1]
             path = edges[0]
             for e in edges[1:]:
-                path @= e
+                path = path @ e
 
-            # NOTE: I removed walking to the left since it was marked as "bug" in
-            # the original's argument.py.
+            # NOTE: I removed walking to the left, see:
+            # https://github.com/ajabri/videowalk/issues/36
             B, N, _ = path.shape
             walks[f"cyc_r{i}"] = (path, create_crw_target(B, N, path.device))
 
@@ -179,7 +180,10 @@ class CRW(nn.Module):
         debug = {}
 
         for name, (path, target) in walks.items():
-            logits = E.rearrange((path + EPS).log(), "b n m -> (b n) m")
+            logits = E.rearrange(path, "b n m -> (b n) m")
+            # NOTE: Fixed incorrect cross entropy here:
+            # https://github.com/ajabri/videowalk/issues/29
+            # TODO: Below can use `label_smoothing` kwarg to smooth target.
             loss = F.cross_entropy(logits, target)
             losses.append(loss)
 

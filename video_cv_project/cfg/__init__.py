@@ -10,6 +10,4 @@ RGB = 3
 RGB_MEAN = (0.4914, 0.4822, 0.4465)
 RGB_STD = (0.2023, 0.1994, 0.2010)
 
-EPS = 1e-20
-
 BEST_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

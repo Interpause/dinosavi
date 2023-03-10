@@ -26,12 +26,13 @@ train:
 
   optimizer:
     _target_: torch.optim.Adam
-    lr: 0.0001
+    lr: 0.0002
 
   scheduler:
     _target_: torch.optim.lr_scheduler.OneCycleLR
-    max_lr: 0.0003
-    total_steps: 40000
+    max_lr: ${..optimizer.lr}
+    total_steps: ${total_steps}
+    pct_start: 0.05
 
 model:
   edge_dropout: 0.1

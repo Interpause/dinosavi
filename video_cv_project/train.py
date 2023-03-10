@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import torch
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
@@ -46,16 +46,18 @@ def train(cfg: DictConfig):
 
     log.debug("Create Train Dataloader.")
     dataloader = create_kinetics_dataloader(cfg)
+    with open_dict(cfg):
+        cfg.total_steps = len(dataloader) * epochs
+    log.info(f"Total Steps: {cfg.total_steps}")
 
     log.debug("Create Optimizer.")
     optimizer = instantiate(cfg.train.optimizer, model.parameters())
-    log.info(f"Optimizer:\n{optimizer}")
+    log.info(f"Optimizer:\n{optimizer.state_dict()}")
 
     log.debug("Create Scheduler.")
     if hasattr(cfg.train.scheduler, "milestones"):
-        total = len(dataloader) * epochs
         cfg.train.scheduler.milestones = [
-            int(total * m) for m in cfg.train.scheduler.milestones
+            int(cfg.total_steps * m) for m in cfg.train.scheduler.milestones
         ]
     scheduler = instantiate(cfg.train.scheduler, optimizer)
     log.info(f"Scheduler:\n{scheduler.state_dict()}")
@@ -74,9 +76,9 @@ def train(cfg: DictConfig):
 
         # TODO: Investigate impact of throwing away optimizer and scheduler state.
         checkpointer.load(resume_ckpt, ignore_keys=["optimizer", "lr_scheduler"])
-        cfg = OmegaConf.create(checkpointer.cfg)
+        old_cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
-        log.debug(f"Ckpt Config:\n{cfg}")
+        log.debug(f"Ckpt Config:\n{old_cfg}")
 
     model.to(device).train()
 

@@ -10,7 +10,7 @@ from video_cv_project.utils.logging import get_dirs
 
 log = logging.getLogger("video_cv_project")
 
-warnings.filterwarnings("ignore", category=UserWarning)
+# warnings.filterwarnings("ignore", category=UserWarning)
 
 
 @hydra.main(version_base="1.3", config_path="cfg", config_name="main")

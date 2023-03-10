@@ -110,10 +110,10 @@ class Trainer:
     def _log(self):
         i = self._stat["epoch"]
         n = self._stat["iteration"]
+        step = (i - 1) * len(self.dataloader) + (n - 1)
 
-        self._tbwriter.add_scalars(
-            "train", self._stat, (i - 1) * len(self.dataloader) + (n - 1)
-        )
+        for k, v in self._stat.items():
+            self._tbwriter.add_scalar(k, v, step)
 
         stats = []
         for k, v in self._stat.items():
@@ -121,11 +121,11 @@ class Trainer:
                 continue
             # Add other formats as needed.
             if isinstance(v, float):
-                stats.append(f"{k}: {v:.6g}")
+                stats.append(f"{k}: {v:.4g}")
             else:
                 stats.append(f"{k}: {v}")
         stat_str = ", ".join(stats)
-        self.pbar.update(self._itask, status=f"{stat_str[:40]}")
+        self.pbar.update(self._itask, status=f"{stat_str[:50]}")
 
         if n % self.log_every == 0 or n == len(self.dataloader):
             self._tbwriter.flush()

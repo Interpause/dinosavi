@@ -184,9 +184,9 @@ class CRW(nn.Module):
             losses.append(loss)
 
             # TODO: Adding logits to debug might be useful for visualization.
-            debug[f"{name}/loss"] = float(loss)
-            debug[f"{name}/acc"] = float(logits.argmax(-1).eq(target).float().mean())
-            debug[f"{name}/N"] = path.shape[1]
+            debug[f"loss/{name}"] = float(loss)
+            debug[f"acc/{name}"] = float(logits.argmax(-1).eq(target).float().mean())
+            debug[f"N/{name}"] = path.shape[2]
 
         return torch.stack(losses).mean(), debug
 

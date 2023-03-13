@@ -4,6 +4,7 @@ from typing import Callable, List, Sequence, Tuple
 
 import einops as E
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
 from einops.layers.torch import Rearrange
@@ -18,18 +19,17 @@ __all__ = [
 ]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
-# TODO: Figure out how to fix augmentation per video. Might need albumentations.
-# How to apply albumentation on video: https://albumentations.ai/docs/examples/example_multi_target/
 
 
-class MapTransform:
+class MapTransform(nn.Module):
     """Map transforms over video or some other NCHW image tensor."""
 
     def __init__(self, *args: Callable):
         """Create MapTransform."""
+        super(MapTransform, self).__init__()
         self.transforms = args
 
-    def __call__(self, ims: torch.Tensor):
+    def forward(self, ims: torch.Tensor):
         """Apply transforms to NCHW tensor.
 
         Args:
@@ -47,7 +47,7 @@ class MapTransform:
         return f"{self.__class__.__name__}(\n  {lines}\n)"
 
 
-class PatchSplitTransform:
+class PatchSplitTransform(nn.Module):
     """Split image into patches.
 
     Note that only tensors are supported.
@@ -62,10 +62,11 @@ class PatchSplitTransform:
             size (int | Tuple[int, int]): Patch size (H, W).
             stride (int | Tuple[int, int]): Patch stride (H, W).
         """
+        super(PatchSplitTransform, self).__init__()
         self.size = (size, size) if isinstance(size, int) else size
         self.stride = (stride, stride) if isinstance(stride, int) else stride
 
-    def __call__(self, im: torch.Tensor):
+    def forward(self, im: torch.Tensor):
         """Split CHW image into patches.
 
         Args:

@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 CKPT_FOLDER = "weights"
 MODEL_NAME = f"epoch%d_%d.ckpt"
-SAMPLE_INPUT = [1, 8, 147, 64, 64]
+SAMPLE_INPUT = [1, 8, 3, 256, 256]
 
 # TODO: More metadata about input mode like patch size, number of patches, shape, etc.
 # TODO: Distributed training wait who am i kidding.

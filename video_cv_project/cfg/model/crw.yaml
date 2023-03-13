@@ -7,12 +7,11 @@ encoder:
   weights: null
   # del_layers: [layer4]
 patch_transform:
-  - _target_: video_cv_project.data.transforms.MapTransform
-  - _target_: video_cv_project.data.transforms.PatchSplitJitterTransform
-    size: 64
-    stride: 32
-    scale: [0.7, 0.9]
-    ratio: [0.8, 1.2]
+  _target_: video_cv_project.data.transform.PatchAndJitter
+  size: 64
+  stride: 32
+  scale: [0.7, 0.9]
+  ratio: [0.8, 1.2]
 edge_dropout: 0.0
 feat_dropout: 0.0
 temperature: 0.05

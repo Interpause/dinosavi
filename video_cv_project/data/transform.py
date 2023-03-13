@@ -15,7 +15,7 @@ __all__ = [
     "create_pipeline",
     "MapTransform",
     "PatchSplitTransform",
-    "PatchSplitJitterTransform",
+    "PatchAndJitter",
 ]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
@@ -28,6 +28,10 @@ class MapTransform(nn.Module):
         """Create MapTransform."""
         super(MapTransform, self).__init__()
         self.transforms = args
+        # Register modules so they show up.
+        self._nn_transforms = nn.ModuleList(
+            [t for t in args if isinstance(t, nn.Module)]
+        )
 
     def forward(self, ims: torch.Tensor):
         """Apply transforms to NCHW tensor.
@@ -84,8 +88,8 @@ class PatchSplitTransform(nn.Module):
         return f"{self.__class__.__name__}(size={self.size}, stride={self.stride})"
 
 
-class PatchSplitJitterTransform(nn.Module):
-    """Split image into patches and apply spatial jitter."""
+class PatchAndJitter(nn.Module):
+    """Split video into patches and apply spatial jitter."""
 
     def __init__(
         self,
@@ -102,27 +106,28 @@ class PatchSplitJitterTransform(nn.Module):
             scale (Tuple[float, float]): Bounds for crop size relative to image area.
             ratio (Tuple[float, float]): Bounds for random aspect ratio change.
         """
-        super(PatchSplitJitterTransform, self).__init__()
+        super(PatchAndJitter, self).__init__()
         self.size = (size, size) if isinstance(size, int) else size
         self.stride = (stride, stride) if isinstance(stride, int) else stride
         self.scale = scale
         self.ratio = ratio
-        self.splitter = PatchSplitTransform(size, stride)
-        self.jitter = T.RandomResizedCrop(
-            size, scale=scale, ratio=ratio, antialias=True
+        self.transform = MapTransform(
+            PatchSplitTransform(size, stride),
+            MapTransform(
+                T.RandomResizedCrop(size, scale=scale, ratio=ratio, antialias=True)
+            ),
         )
 
-    def forward(self, im: torch.Tensor):
-        """Split CHW image into patches and apply spatial jitter.
+    def forward(self, im: torch.Tensor) -> torch.Tensor:
+        """Split TCHW images into patches and apply spatial jitter.
 
         Args:
-            im (torch.Tensor): CHW image.
+            im (torch.Tensor): TCHW images.
 
         Returns:
-            torch.Tensor: NCHW image patches.
+            torch.Tensor: TNCHW image patches.
         """
-        pats = self.splitter(im)
-        return torch.stack([self.jitter(p) for p in pats])
+        return self.transform(im)
 
     def __repr__(self):
         """Return string representation of class."""

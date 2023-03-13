@@ -5,7 +5,8 @@ defaults:
   - base
 
 do_patches: true
-im_size: [384, 384]
+im_size: [256, 256]
+# [384, 384]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
 
@@ -30,6 +31,6 @@ patch_transforms:
   # Spatial jitter from paper.
   - _target_: torchvision.transforms.RandomResizedCrop
     size: ${...patch_size}
-    scale: [0.75, 0.95]
-    ratio: [0.85, 1.15]
+    scale: [0.7, 0.9]
+    ratio: [0.8, 1.2]
     interpolation: ${...interpolation}

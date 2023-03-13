@@ -22,4 +22,3 @@ sampler:
 
 dataloader:
   batch_size: 1
-  pin_memory: true

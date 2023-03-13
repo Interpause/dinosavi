@@ -4,7 +4,6 @@ defaults:
   # Base pipeline config.
   - base
 
-do_patches: true
 im_size: [256, 256]
 # [384, 384]
 
@@ -20,13 +19,3 @@ im_transforms:
   #   contrast: 0.05
   #   saturation: 0
   #   hue: 0
-
-patch_transforms:
-  - _target_: torchvision.transforms.ToPILImage
-  # Spatial jitter from paper.
-  - _target_: torchvision.transforms.RandomResizedCrop
-    size: ${...patch_size}
-    scale: [0.7, 0.9]
-    ratio: [0.8, 1.2]
-    interpolation: ${...interpolation}
-    antialias: true

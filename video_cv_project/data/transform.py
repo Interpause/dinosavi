@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-from einops.layers.torch import Rearrange
 
 from video_cv_project.cfg import RGB_MEAN, RGB_STD
 
@@ -155,13 +154,9 @@ class _ToTensor:
 
 def create_pipeline(
     im_transforms: Sequence[Callable] = [],
-    patch_transforms: Sequence[Callable] = [],
     do_rgb_norm: bool = True,
     rgb_mean: Sequence[float] = RGB_MEAN,
     rgb_std: Sequence[float] = RGB_STD,
-    do_patches: bool = False,
-    patch_size: int | Tuple[int, int] = 64,
-    patch_stride: int | Tuple[int, int] = 32,
 ):
     """Create pipeline for training or inference.
 
@@ -169,48 +164,16 @@ def create_pipeline(
     """
     rgb_norm = T.Normalize(mean=rgb_mean, std=rgb_std)
     im: List[Callable] = [*im_transforms, _ToTensor()]
-    if do_patches:
-        patch: List[Callable] = [*patch_transforms, _ToTensor()]
-        patch += [rgb_norm] if do_rgb_norm else []
-        im += [
-            PatchSplitTransform(patch_size, patch_stride),
-            MapTransform(*patch),
-            Rearrange("n c h w -> (n c) h w"),
-        ]
-    else:
-        im += [rgb_norm] if do_rgb_norm else []
+    im += [rgb_norm] if do_rgb_norm else []
     return MapTransform(*im)
 
 
-def create_train_pipeline(
-    im_size: Tuple[int, int] = (256, 256),
-    patch_size: int | Tuple[int, int] = 64,
-    patch_stride: int | Tuple[int, int] = 32,
-):
+def create_train_pipeline(im_size: Tuple[int, int] = (256, 256), **kwargs):
     """Create training pipeline."""
-    # Augmentation transforms before splitting image to patches.
     im_transforms = [
         T.ToPILImage(),
         T.Resize(im_size, antialias=True),
-        T.ToTensor(),
-        # T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0),
+        # T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0, hue=0),
     ]
 
-    # Augmentation transforms after splitting image to patches.
-    patch_transforms = [
-        T.ToPILImage(),
-        # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
-        T.RandomResizedCrop(
-            patch_size, scale=(0.8, 0.95), ratio=(0.9, 1.1), antialias=True
-        ),
-        T.ToTensor(),
-        # Cannot convert to PIL after normalization.
-        T.Normalize(mean=RGB_MEAN, std=RGB_STD),
-    ]
-
-    return MapTransform(
-        *im_transforms,
-        PatchSplitTransform(patch_size, patch_stride),
-        MapTransform(*patch_transforms),
-        Rearrange("n c h w -> (n c) h w"),
-    )
+    return create_pipeline(im_transforms, **kwargs)

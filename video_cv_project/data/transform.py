@@ -16,6 +16,7 @@ __all__ = [
     "create_pipeline",
     "MapTransform",
     "PatchSplitTransform",
+    "PatchSplitJitterTransform",
 ]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
@@ -82,6 +83,51 @@ class PatchSplitTransform(nn.Module):
     def __repr__(self):
         """Return string representation of class."""
         return f"{self.__class__.__name__}(size={self.size}, stride={self.stride})"
+
+
+class PatchSplitJitterTransform(nn.Module):
+    """Split image into patches and apply spatial jitter."""
+
+    def __init__(
+        self,
+        size: int | Tuple[int, int] = 64,
+        stride: int | Tuple[int, int] = 32,
+        scale: Tuple[float, float] = (0.7, 0.9),
+        ratio: Tuple[float, float] = (0.8, 1.2),
+    ):
+        """Create PatchSplitWithJitterTransform.
+
+        Args:
+            size (int | Tuple[int, int]): Patch size (H, W).
+            stride (int | Tuple[int, int]): Patch stride (H, W).
+            scale (Tuple[float, float]): Bounds for crop size relative to image area.
+            ratio (Tuple[float, float]): Bounds for random aspect ratio change.
+        """
+        super(PatchSplitJitterTransform, self).__init__()
+        self.size = (size, size) if isinstance(size, int) else size
+        self.stride = (stride, stride) if isinstance(stride, int) else stride
+        self.scale = scale
+        self.ratio = ratio
+        self.splitter = PatchSplitTransform(size, stride)
+        self.jitter = T.RandomResizedCrop(
+            size, scale=scale, ratio=ratio, antialias=True
+        )
+
+    def forward(self, im: torch.Tensor):
+        """Split CHW image into patches and apply spatial jitter.
+
+        Args:
+            im (torch.Tensor): CHW image.
+
+        Returns:
+            torch.Tensor: NCHW image patches.
+        """
+        pats = self.splitter(im)
+        return torch.stack([self.jitter(p) for p in pats])
+
+    def __repr__(self):
+        """Return string representation of class."""
+        return f"{self.__class__.__name__}(size={self.size}, stride={self.stride}, scale={self.scale}, ratio={self.ratio})"
 
 
 class _ToTensor:

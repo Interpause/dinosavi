@@ -79,13 +79,13 @@ class VOSDataset(Dataset):
         if self.im_size != -1:
             for i, (im, lbl) in enumerate(zip(ims, lbls)):
                 # Some interpolation methods only support PIL.
-                ims[i] = F.resize(im, self.im_size)
-                lbls[i] = F.resize(lbl, self.im_size)
+                ims[i] = F.resize(im, self.im_size, antialias=True)
+                lbls[i] = F.resize(lbl, self.im_size, antialias=True)
 
         lbls = torch.stack(lbls)  # TCHW
         h, w = lbls.shape[-2:]
         lbl_sz = (ceil(h / self.map_scale), ceil(w / self.map_scale))
-        lbls = F.resize(lbls, lbl_sz)
+        lbls = F.resize(lbls, lbl_sz, antialias=True)
 
         ims = self._repeat_context(ims)
         lbls = self._repeat_context(lbls)

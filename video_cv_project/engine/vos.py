@@ -44,7 +44,7 @@ def dump_vos_preds(
     for t, (im, lbl) in enumerate(zip(ims, lbls)):
         # Resize labels to original size.
         # NOTE: Can squeeze extra contour accuracy by using a different interpolation method.
-        lbl = F.resize(lbl, sz)
+        lbl = F.resize(lbl, sz, antialias=True)
 
         # Argmax to get predicted class for each pixel.
         lbl = lbl.argmax(dim=0)

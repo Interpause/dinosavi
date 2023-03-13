@@ -20,6 +20,7 @@ im_transforms:
   - _target_: torchvision.transforms.Resize
     size: ${...im_size}
     interpolation: ${...interpolation}
+    antialias: true
   # - _target_: torchvision.transforms.ColorJitter
   #   brightness: 0.05
   #   contrast: 0.05
@@ -34,3 +35,4 @@ patch_transforms:
     scale: [0.7, 0.9]
     ratio: [0.8, 1.2]
     interpolation: ${...interpolation}
+    antialias: true

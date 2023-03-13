@@ -142,12 +142,10 @@ def create_train_pipeline(
     patch_stride: int | Tuple[int, int] = 32,
 ):
     """Create training pipeline."""
-    scaler = T.InterpolationMode.LANCZOS
-
     # Augmentation transforms before splitting image to patches.
     im_transforms = [
         T.ToPILImage(),
-        T.Resize(im_size, interpolation=scaler, antialias=True),
+        T.Resize(im_size, antialias=True),
         T.ToTensor(),
         # T.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0),
     ]
@@ -157,11 +155,7 @@ def create_train_pipeline(
         T.ToPILImage(),
         # Spatial jitter from paper. NOTE: Upstream forgot to suppress aspect ratio changes.
         T.RandomResizedCrop(
-            patch_size,
-            scale=(0.8, 0.95),
-            ratio=(0.9, 1.1),
-            interpolation=scaler,
-            antialias=True,
+            patch_size, scale=(0.8, 0.95), ratio=(0.9, 1.1), antialias=True
         ),
         T.ToTensor(),
         # Cannot convert to PIL after normalization.

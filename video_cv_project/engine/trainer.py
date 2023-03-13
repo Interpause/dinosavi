@@ -50,10 +50,13 @@ class Trainer:
             Tuple[int, int, torch.Tensor]: Epoch, iteration, and batch.
         """
         is_interrupted = False
+        orig_handler = signal.getsignal(signal.SIGINT)
 
         def set_interrupted(sig, frame):
             if parent_process() is not None:
+                orig_handler(sig, frame)
                 return
+
             nonlocal is_interrupted
             is_interrupted = True
             log.debug("Interrupt Point:", stack_info=frame, stacklevel=2)
@@ -65,7 +68,9 @@ class Trainer:
                 self.save_func(self._stat["epoch"], self._stat["iteration"])
                 raise KeyboardInterrupt
 
-        orig_handler = signal.signal(signal.SIGINT, set_interrupted)
+        # I verified that `__iter__` is only called in the main process already.
+        # So signal handler being registered for child processes is Python's behavior.
+        signal.signal(signal.SIGINT, set_interrupted)
 
         try:
             self.pbar.start()

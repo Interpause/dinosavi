@@ -25,11 +25,12 @@ SAMPLE_INPUT = [1, 8, 147, 64, 64]
 
 def train(cfg: DictConfig):
     """Train model."""
+    perf_hack()
+
     root_dir, out_dir = get_dirs()
     ckpt_dir = out_dir / CKPT_FOLDER
     ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.
 
-    perf_hack()
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     epochs = cfg.train.epochs
     log_every = cfg.train.log_every

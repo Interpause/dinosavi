@@ -55,8 +55,6 @@ class DAVISDataset(VOSDataset):
 
 def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
     """Create dataloader for DAVIS dataset."""
-    rng = torch.manual_seed(42)
-
     transform = instantiate(cfg.data.transform.pipeline)
     log.info(f"Pipeline:\n{transform}")
 
@@ -66,7 +64,6 @@ def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,
-        generator=rng,
         collate_fn=vos_collate,
     )
     return dataloader

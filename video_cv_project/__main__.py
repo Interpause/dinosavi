@@ -1,6 +1,7 @@
 """Main entrypoint."""
 
 import logging
+import multiprocessing
 import warnings
 
 import hydra
@@ -44,4 +45,10 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    # Support CUDA tensors in multiprocessing/safer anyways.
+    if "forkserver" in multiprocessing.get_all_start_methods():
+        multiprocessing.set_start_method("forkserver")
+    else:
+        multiprocessing.set_start_method("spawn")
+    multiprocessing.freeze_support()
     main()

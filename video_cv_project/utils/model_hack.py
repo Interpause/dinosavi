@@ -1,7 +1,9 @@
 """Utility functions for modifying models."""
 
+import random
 from typing import Callable, Sequence, TypeVar
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -13,9 +15,21 @@ __all__ = [
     "override_forward",
     "infer_outdim",
     "perf_hack",
+    "seed_rand",
 ]
 
 Self = TypeVar("Self")
+
+
+def seed_rand(seed: int = 42):
+    """Seed random generators.
+
+    Args:
+        seed (int, optional): Seed. Defaults to 42.
+    """
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
 
 def perf_hack():
@@ -23,6 +37,12 @@ def perf_hack():
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+
+    # Seed random here, why not?
+    seed_rand()
+
+    # Fix for running out of File Descriptors.
+    torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 def find_layers(model: nn.Module, names: Sequence[str]):

@@ -22,10 +22,10 @@ SAMPLE_INPUT = [1, 8, 3, 320, 320]
 def eval(cfg: DictConfig):
     """Evaluate model."""
     assert cfg.resume is not None, "Must provide resume path in eval mode."
+    perf_hack()
 
     root_dir, out_dir = get_dirs()
 
-    perf_hack()
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     log.info(f"Torch Device: {device}")
     context_len = cfg.eval.context_len

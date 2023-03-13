@@ -25,8 +25,6 @@ def collate(batch):
 
 def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
     """Create dataloader for Kinetics dataset."""
-    rng = torch.manual_seed(42)
-
     meta = None
     if cfg.data.cache_path:
         try:
@@ -67,7 +65,6 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,
-        generator=rng,
         collate_fn=collate,
     )
     return dataloader

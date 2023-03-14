@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
 
-from video_cv_project.cfg import BEST_DEVICE
+from video_cv_project.cfg import BEST_DEVICE, PENALTY
 
 __all__ = [
     "calc_context_frame_idx",
@@ -119,8 +119,8 @@ def batched_affinity(
     # TODO: Consider implementing original's pixel-level batching.
     # Hardcode to 1, see below note on issue with `torch.topk`.
     b = 1  # batch_size
-    # -1e10 penalty to hard mask pixels outside radius.
-    mask = (mask * -1e10).to(device)
+    # Penalty to hard mask pixels outside radius.
+    mask = (mask * PENALTY).to(device)
 
     Is, Ws = [], []
     for t in range(0, len(keys), b):

@@ -6,6 +6,8 @@ import einops as E
 import torch
 import torch.nn.functional as F
 
+from video_cv_project.cfg import PENALTY
+
 __all__ = ["calc_affinity", "zero_out_diag", "calc_markov", "create_crw_target"]
 
 
@@ -64,7 +66,8 @@ def calc_markov(
     # NOTE: zero_diag is unused upstream, but it could be useful.
     if zero_diag:
         affinity = zero_out_diag(affinity)
-    affinity = F.dropout(affinity, p=dropout, training=do_dropout)
+    if do_dropout:
+        affinity[torch.rand_like(affinity) < dropout] = PENALTY
     return F.softmax(affinity / temperature, dim=2)
 
 

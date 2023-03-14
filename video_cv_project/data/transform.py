@@ -111,11 +111,8 @@ class PatchAndJitter(nn.Module):
         self.stride = (stride, stride) if isinstance(stride, int) else stride
         self.scale = scale
         self.ratio = ratio
-        self.transform = MapTransform(
-            PatchSplitTransform(size, stride),
-            MapTransform(
-                T.RandomResizedCrop(size, scale=scale, ratio=ratio, antialias=True)
-            ),
+        self.jitter = T.RandomResizedCrop(
+            size, scale=scale, ratio=ratio, antialias=True
         )
 
     def forward(self, im: torch.Tensor) -> torch.Tensor:
@@ -127,7 +124,11 @@ class PatchAndJitter(nn.Module):
         Returns:
             torch.Tensor: TNCHW image patches.
         """
-        return self.transform(im)
+        h, w = self.size
+        pats = F.unfold(im, self.size, stride=self.stride)
+        pats = E.rearrange(pats, "t (c h w) n -> (t n) c h w", h=h, w=w)
+        pats = [self.jitter(p) for p in pats]
+        return E.rearrange(pats, "(t n) c h w -> t n c h w", t=im.shape[0])  # type: ignore
 
     def __repr__(self):
         """Return string representation of class."""

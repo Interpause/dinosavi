@@ -13,5 +13,6 @@ def _test(im_path: str, pipeline):
     im = F.to_tensor(Image.open(im_path).convert("RGB"))
     ims = pipeline([im])
     ims = ims.unflatten(0, (-1, 3))
+    # Might want to use `torchvision.utils.make_grid` here.
     for i, patch in enumerate(ims):
         F.to_pil_image(patch).save(f"{i}.png")

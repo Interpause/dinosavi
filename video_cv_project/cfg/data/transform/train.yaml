@@ -19,3 +19,10 @@ im_transforms:
   #   contrast: 0.05
   #   saturation: 0
   #   hue: 0
+
+patch_func:
+  _target_: video_cv_project.data.transform.PatchAndJitter
+  size: 64
+  stride: 32
+  scale: [0.7, 0.9]
+  ratio: [0.8, 1.2]

@@ -2,6 +2,7 @@
 
 im_size: -1
 im_transforms: []
+patch_func: null
 
 pipeline:
   _target_: video_cv_project.data.transform.create_pipeline

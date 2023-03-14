@@ -40,10 +40,21 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
 
     transform = (
         instantiate(cfg.data.transform.pipeline)
-        if cfg.data.transform
+        if cfg.data.transform.pipeline
         else create_train_pipeline()
     )
+    patch_func = (
+        instantiate(cfg.data.transform.patch_func)
+        if cfg.data.transform.patch_func
+        else None
+    )
     log.info(f"Pipeline:\n{transform}")
+    log.info(f"Patch Function: {patch_func}")
+
+    def _transform(x):
+        if patch_func:
+            return patch_func(transform(x))
+        return transform(x)
 
     try:
         dataset: Kinetics = instantiate(
@@ -54,7 +65,7 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
 
     torch.save(dataset, cfg.data.cache_path)
     # Don't save transform into cache else loading may fail.
-    dataset.transform = transform
+    dataset.transform = _transform
 
     log.info(f"Total Videos: {dataset.video_clips.num_videos()}")
     log.info(f"Total Clips: {len(dataset)}")

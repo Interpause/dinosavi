@@ -4,7 +4,7 @@ Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b
 """
 
 from functools import partial
-from typing import Callable, Dict, Tuple
+from typing import Dict, Tuple
 
 import einops as E
 import torch
@@ -34,14 +34,9 @@ class CRW(nn.Module):
     is done within the model itself, and in downstream tasks, only the encoder is
     used.
 
-    If ``patch_transform`` is not provided, then the image latent pixels will be
-    used as the nodes for the random walk instead of patches. If provided, it is
-    expected to accept TCHW images and return TNCHW patches.
-
     Attributes:
         encoder (torch.nn.Module): Encoder for image patches.
         head (torch.nn.Module): Head to get node features from encoder latent map.
-        patch_transform (Callable[[torch.Tensor], torch.Tensor]): Transform to split image into patches.
         edge_dropout (float): Dropout applied to edges in walk.
         feat_dropout (float): Dropout applied to latent map from encoder.
         temperature (float): Temperature of softmax.
@@ -52,7 +47,6 @@ class CRW(nn.Module):
     def __init__(
         self,
         encoder: nn.Module,
-        patch_transform: Callable[[torch.Tensor], torch.Tensor] = None,
         edge_dropout: float = 0.0,
         feat_dropout: float = 0.0,
         temperature: float = 0.05,
@@ -64,7 +58,6 @@ class CRW(nn.Module):
 
         Args:
             encoder (torch.nn.Module): Model to use for encoding image patches.
-            patch_transform (Callable[[torch.Tensor], torch.Tensor], optional): Transform to split image into patches.
             edge_dropout (float, optional): Dropout applied to edges in walk. Defaults to 0.0.
             feat_dropout (float, optional): Dropout applied to latent map from encoder. Defaults to 0.0.
             temperature (float, optional): Temperature of softmax. Defaults to 0.07.
@@ -81,7 +74,6 @@ class CRW(nn.Module):
         self.map_scale = sz // enc_dim[-1]  # Downscale factor of latent map.
 
         self.encoder = encoder
-        self.patch_transform = patch_transform
         self.head = FCHead(self.enc_channels, num_feats, head_depth)
 
         self.edge_dropout = edge_dropout
@@ -90,20 +82,6 @@ class CRW(nn.Module):
         self.temperature = temperature
 
         self.to(device)
-
-    def _split_patches(self, x: torch.Tensor) -> torch.Tensor:
-        """Split image into patches.
-
-        Args:
-            x (torch.Tensor): BTCHW images.
-
-        Returns:
-            torch.Tensor: BNTCHW patches.
-        """
-        if self.patch_transform is None:
-            return E.rearrange(x, "b t c h w -> b 1 t c h w")
-        x = [self.patch_transform(v) for v in x]
-        return E.rearrange(x, "b t n c h w -> b n t c h w")  # type: ignore
 
     def _embed_nodes(self, x: torch.Tensor) -> torch.Tensor:
         """Embed image or image patches using encoder to get node features.
@@ -222,14 +200,13 @@ class CRW(nn.Module):
         """Forward pass.
 
         Args:
-            x (torch.Tensor): BTCHW input images.
+            x (torch.Tensor): BTNCHW input patches or images (when N=1).
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor, dict]: BTNC node features, loss, and debug info.
         """
         # TODO: Add patches to debug info for visualization.
-        pats = self._split_patches(x)
-        feats = self._embed_nodes(pats)
+        feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks)
         return feats, loss, debug

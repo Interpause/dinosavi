@@ -115,20 +115,25 @@ class PatchAndJitter(nn.Module):
             size, scale=scale, ratio=ratio, antialias=True
         )
 
-    def forward(self, im: torch.Tensor) -> torch.Tensor:
+    def forward(self, im: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Split TCHW images into patches and apply spatial jitter.
 
         Args:
             im (torch.Tensor): TCHW images.
 
         Returns:
-            torch.Tensor: TNCHW image patches.
+            torch.Tensor:
+                pats: TNCHW image patches.
+                tgts: N target patch class ids.
         """
         h, w = self.size
         pats = F.unfold(im, self.size, stride=self.stride)
         pats = E.rearrange(pats, "t (c h w) n -> (t n) c h w", h=h, w=w)
         pats = [self.jitter(p) for p in pats]
-        return E.rearrange(pats, "(t n) c h w -> t n c h w", t=im.shape[0])  # type: ignore
+        pats: torch.Tensor = E.rearrange(pats, "(t n) c h w -> t n c h w", t=im.shape[0])  # type: ignore
+        # Keys are ids of start patches, values are ids of end patches.
+        tgts = torch.arange(pats.shape[1])
+        return pats, tgts
 
     def __repr__(self):
         """Return string representation of class."""

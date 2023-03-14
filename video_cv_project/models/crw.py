@@ -119,13 +119,12 @@ class CRW(nn.Module):
             feats (torch.Tensor): BTNC node features.
 
         Returns:
-            Dict[str, Tuple[torch.Tensor, torch.Tensor]]: Map of sub-cycle palindromes
-            to Markov matrices and target class ids.
+            Dict[str, torch.Tensor]: Map of sub-cycle palindromes to Markov matrices.
 
             The Markov matrices are BNM and contain the total transition probability
             from all initial nodes to all final nodes for that palindrome.
         """
-        walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]] = {}
+        walks: Dict[str, torch.Tensor] = {}
 
         T = feats.shape[1]
 
@@ -159,27 +158,39 @@ class CRW(nn.Module):
 
             # NOTE: I removed walking to the left, see:
             # https://github.com/ajabri/videowalk/issues/36
-            B, N, _ = path.shape
-            walks[f"cyc_r{i}"] = (path, create_crw_target(B, N, path.device))
+            walks[f"cyc_r{i}"] = path
 
         return walks
 
-    def _calc_loss(self, walks: Dict[str, Tuple[torch.Tensor, torch.Tensor]]):
+    def _calc_loss(
+        self,
+        walks: Dict[str, torch.Tensor],
+        tgts: torch.Tensor = None,
+    ):
         """Calculate cross-entropy loss.
 
         For every sub-cycle palindrome, cross-entropy loss is calculated between
-        the BNM Markov matrix and the target class ids.
+        the BNM Markov matrix and the target class ids. If target class ids aren't
+        given, then assume palindrome, in which the target class ids are the same
+        as the initial node ids.
 
         Args:
-            walks (Dict[str, Tuple[torch.Tensor, torch.Tensor]]): See `self._compute_walks`.
+            walks (Dict[str, torch.Tensor]): See `self._compute_walks`.
+            tgts (torch.Tensor, optional): BN target class ids. Defaults to None.
 
         Returns:
             Tuple[torch.Tensor, dict]: Loss and debug info.
         """
         losses = []
-        debug = {}
+        debug: dict = {}
 
-        for name, (path, target) in walks.items():
+        # If no target is given, assume palindrome.
+        _i = [*walks.values()][0]
+        B, N, _ = _i.shape
+        target = create_crw_target(B, N, _i.device) if tgts is None else tgts.flatten()
+        debug[f"N"] = N
+
+        for name, path in walks.items():
             logits = E.rearrange(path, "b n m -> (b n) m")
             # NOTE: Fixed incorrect cross entropy here:
             # https://github.com/ajabri/videowalk/issues/29
@@ -192,15 +203,15 @@ class CRW(nn.Module):
             # TODO: Adding logits to debug might be useful for visualization.
             debug[f"loss/{name}"] = float(loss)
             debug[f"acc/{name}"] = float(logits.argmax(-1).eq(target).float().mean())
-        debug[f"N"] = path.shape[2]
 
         return torch.stack(losses).mean(), debug
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, tgts: torch.Tensor = None):
         """Forward pass.
 
         Args:
             x (torch.Tensor): BTNCHW input patches or images (when N=1).
+            tgts (torch.Tensor, optional): BN target patch class ids. Defaults to None.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor, dict]: BTNC node features, loss, and debug info.
@@ -208,5 +219,5 @@ class CRW(nn.Module):
         # TODO: Add patches to debug info for visualization.
         feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
-        loss, debug = self._calc_loss(walks)
+        loss, debug = self._calc_loss(walks, tgts)
         return feats, loss, debug

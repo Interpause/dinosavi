@@ -96,8 +96,10 @@ def train(cfg: DictConfig):
 
     ini_epoch = checkpointer.epoch
     log.info(f"Start training for {epochs} epochs.")
-    for i, n, video in trainer:
-        _, loss, debug = model(video.to(device))
+    for i, n, (video, target) in trainer:
+        video = video.to(device)
+        target = target.to(device)
+        _, loss, debug = model(video, target)
 
         avg_acc = np.mean([v for k, v in debug.items() if "acc" in k])  # type: ignore
         trainer.update(

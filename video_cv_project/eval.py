@@ -12,7 +12,7 @@ from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
-from video_cv_project.utils import get_dirs, perf_hack
+from video_cv_project.utils import get_dirs, perf_hack, delete_layers
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ def eval(cfg: DictConfig):
 
     log.debug("Create Model.")
     model: CRW = instantiate(cfg.model)
+    delete_layers(model, ["head"])
     encoder = model.encoder
     model_summary = summary(
         encoder, SAMPLE_INPUT, verbose=0, col_width=20, device=device

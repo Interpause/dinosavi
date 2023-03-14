@@ -50,11 +50,15 @@ class Checkpointer:
     def _load(self, ckpt):
         """Actually load state."""
         if self.model and ckpt["model"]:
-            self.model.load_state_dict(ckpt["model"])
+            res = self.model.load_state_dict(ckpt["model"], strict=False)
+            if res.missing_keys:
+                log.warning(f"Missing keys: {res.missing_keys}")
+            if res.unexpected_keys:
+                log.warning(f"Unexpected keys: {res.unexpected_keys}")
         if self.optimizer and ckpt["optimizer"]:
-            self.optimizer.load_state_dict(ckpt["optimizer"])
+            self.optimizer.load_state_dict(ckpt["optimizer"], strict=False)
         if self.scheduler and ckpt["lr_scheduler"]:
-            self.scheduler.load_state_dict(ckpt["lr_scheduler"])
+            self.scheduler.load_state_dict(ckpt["lr_scheduler"], strict=False)
         self.epoch = ckpt["epoch"]
         self.cfg.clear()
         self.cfg.update(ckpt["cfg"])

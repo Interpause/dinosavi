@@ -36,6 +36,7 @@ class FCHead(nn.Module):
         Returns:
             torch.Tensor: Output tensor.
         """
-        for l in self.layers:
+        for l in self.layers[:-1]:
             x = l(x).relu()
+        x = self.layers[-1](x) # Skip activation on last layer.
         return F.normalize(x, p=2, dim=1)  # Euclidean norm.

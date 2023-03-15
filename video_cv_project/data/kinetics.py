@@ -3,6 +3,7 @@
 import logging
 
 import torch
+import torchvision.transforms as T
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, default_collate
@@ -21,6 +22,13 @@ def collate(batch):
     batch = [c[0] for c in batch]
     # `default_collate` searches for and stacks tensors while preserving data structure.
     return default_collate(batch)
+
+
+def _get_transform(transform, patcher=None):
+    """Get transform function for `Kinetics` dataset."""
+    if patcher:
+        return T.Compose([transform, patcher])
+    return transform
 
 
 def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
@@ -51,11 +59,6 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
     log.info(f"Pipeline:\n{transform}")
     log.info(f"Patch Function: {patch_func}")
 
-    def _transform(x):
-        if patch_func:
-            return patch_func(transform(x))
-        return transform(x)
-
     try:
         dataset: Kinetics = instantiate(
             cfg.data.dataset, _precomputed_metadata=meta, download=True
@@ -65,7 +68,7 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
 
     torch.save(dataset, cfg.data.cache_path)
     # Don't save transform into cache else loading may fail.
-    dataset.transform = _transform
+    dataset.transform = _get_transform(transform, patch_func)
 
     log.info(f"Total Videos: {dataset.video_clips.num_videos()}")
     log.info(f"Total Clips: {len(dataset)}")

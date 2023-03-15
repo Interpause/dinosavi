@@ -217,7 +217,7 @@ class CRW(nn.Module):
             Tuple[torch.Tensor, torch.Tensor, dict]: BTNC node features, loss, and debug info.
         """
         # TODO: Add patches to debug info for visualization.
-        feats = self._embed_nodes(x)
+        feats = self._embed_nodes(E.rearrange(x, "b t n c h w -> b n t c h w"))
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks, tgts)
         return feats, loss, debug

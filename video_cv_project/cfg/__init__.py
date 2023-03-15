@@ -12,4 +12,4 @@ RGB_STD = (0.2023, 0.1994, 0.2010)
 
 BEST_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-PENALTY = -1e20
+PENALTY = -1e8

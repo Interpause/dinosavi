@@ -4,7 +4,7 @@ Adapted from https://github.com/ajabri/videowalk/blob/047f3f40135a4b1be2f837793b
 """
 
 from functools import partial
-from typing import Dict, Tuple
+from typing import Dict
 
 import einops as E
 import torch
@@ -90,13 +90,13 @@ class CRW(nn.Module):
         the number of patches N is 1 or greater than 1.
 
         Args:
-            x (torch.Tensor): BNTCHW images or image patches.
+            x (torch.Tensor): BTNCHW images or image patches.
 
         Returns:
             torch.Tensor: BTNC node features.
         """
-        B, N = x.shape[:2]
-        x = E.rearrange(x, "b n t c h w -> (b n) t c h w")
+        B, _, N = x.shape[:3]
+        x = E.rearrange(x, "b t n c h w -> (b n) t c h w")
         maps: torch.Tensor = self.encoder(x)
         maps = F.dropout(maps, p=self.feat_dropout, training=self.training)
 
@@ -110,6 +110,7 @@ class CRW(nn.Module):
             feats = E.reduce(maps, "b t c h w -> b t c", "mean")
 
         feats = self.head(feats)
+        feats = F.normalize(feats, p=2, dim=1)
         return E.rearrange(feats, "(b n) t c -> b t n c", b=B)
 
     def _compute_walks(self, feats: torch.Tensor):
@@ -217,7 +218,7 @@ class CRW(nn.Module):
             Tuple[torch.Tensor, torch.Tensor, dict]: BTNC node features, loss, and debug info.
         """
         # TODO: Add patches to debug info for visualization.
-        feats = self._embed_nodes(E.rearrange(x, "b t n c h w -> b n t c h w"))
+        feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks, tgts)
         return feats, loss, debug

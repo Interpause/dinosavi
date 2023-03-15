@@ -2,7 +2,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 __all__ = ["FCHead"]
 
@@ -38,5 +37,4 @@ class FCHead(nn.Module):
         """
         for l in self.layers[:-1]:
             x = l(x).relu()
-        x = self.layers[-1](x) # Skip activation on last layer.
-        return F.normalize(x, p=2, dim=1)  # Euclidean norm.
+        return self.layers[-1](x)  # Skip activation on last layer.

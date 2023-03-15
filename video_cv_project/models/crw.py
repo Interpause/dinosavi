@@ -110,7 +110,7 @@ class CRW(nn.Module):
             feats = E.reduce(maps, "b t c h w -> b t c", "mean")
 
         feats = self.head(feats)
-        feats = F.normalize(feats, p=2, dim=1)
+        feats = F.normalize(feats, p=2, dim=2)
         return E.rearrange(feats, "(b n) t c -> b t n c", b=B)
 
     def _compute_walks(self, feats: torch.Tensor):

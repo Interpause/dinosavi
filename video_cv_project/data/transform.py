@@ -29,9 +29,7 @@ class MapTransform(nn.Module):
         super(MapTransform, self).__init__()
         self.transforms = args
         # Register modules so they show up.
-        self._nn_transforms = nn.ModuleList(
-            [t for t in args if isinstance(t, nn.Module)]
-        )
+        self._nn_transforms = nn.ModuleList(t for t in args if isinstance(t, nn.Module))
 
     def forward(self, ims: torch.Tensor):
         """Apply transforms to NCHW tensor.

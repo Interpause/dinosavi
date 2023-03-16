@@ -2,7 +2,7 @@
 
 import torch
 
-__all__ = ["RGB", "RGB_MEAN", "RGB_STD", "EPS", "BEST_DEVICE", "PENALTY"]
+__all__ = ["RGB", "RGB_MEAN", "RGB_STD", "BEST_DEVICE", "PENALTY"]
 
 RGB = 3
 # NOTE: Both PyTorch & PIL use RGB order so assume everything is RGB.

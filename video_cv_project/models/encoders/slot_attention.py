@@ -1,11 +1,13 @@
 """Slot Attention implementation in PyTorch based on official TensorFlow implementation."""
 
-import einops as E
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-EPS = 1e-8
+__all__ = ["SlotAttention"]
+
+# TODO: It is possible to use multi-head attention.
+# See: https://github.com/google-research/slot-attention-video/blob/main/savi/modules/attention.py
 
 
 class SlotAttention(nn.Module):
@@ -19,7 +21,7 @@ class SlotAttention(nn.Module):
         Args:
             in_feats (int): Number of input features.
             num_slots (int): Number of slots.
-            num_iters (int): Number of iterations for slots to lock on.
+            num_iters (int): Number of iterations for slots to bind.
             slot_dim (int): Size of representations in each slot.
             hid_dim (int): Size of hidden layer in MLP.
         """
@@ -46,8 +48,7 @@ class SlotAttention(nn.Module):
         # Slots act as query to find representable features.
         self.project_q = nn.Linear(slot_dim, slot_dim, bias=False)
         # Input features are both the key and value.
-        self.project_k = nn.Linear(in_feats, slot_dim, bias=False)
-        self.project_v = nn.Linear(in_feats, slot_dim, bias=False)
+        self.project_kv = nn.Linear(in_feats, 2 * slot_dim, bias=False)
 
         # Slot updaters.
         self.gru = nn.GRUCell(slot_dim, slot_dim)
@@ -81,28 +82,15 @@ class SlotAttention(nn.Module):
             torch.Tensor: BSC slots.
         """
         x = self.norm_in(x)
-        k = self.project_k(x)
-        v = self.project_v(x)
+        k, v = self.project_kv(x).split(self.slot_dim, dim=2)
 
         slots = self._init_slots(x)
 
-        # Multiple rounds of attention for slots to lock on.
+        # Multiple rounds of attention for slots to bind.
         for _ in range(self.num_iters):
-            prev = slots
-            slots = self.norm_slots(slots)
-
-            # Attention.
-            q = self.project_q(slots)
-            logits = E.einsum(k, q, "b n c, b s c -> b n s")
-            attn = F.softmax(logits / self.slot_dim**0.5, dim=2)
-
-            # Weighted mean.
-            attn /= attn.sum(dim=1, keepdim=True) + EPS
-            updates = E.einsum(attn, v, "b n s, b n c -> b s c")
-
-            # Slot update.
-            slots = self.gru(updates.flatten(0, 1), prev.flatten(0, 1)).view_as(prev)
-            # Residual.
-            slots += self.mlp(self.norm_mlp(slots))
+            q = self.project_q(self.norm_slots(slots))
+            attn = F.scaled_dot_product_attention(q, k, v)
+            slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)
+            slots += self.mlp(self.norm_mlp(slots))  # Residual.
 
         return slots

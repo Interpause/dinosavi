@@ -20,7 +20,7 @@ def zero_out_diag(x: torch.Tensor):
     Returns:
         torch.Tensor: Tensor with diagonal zeroed out.
     """
-    mask = (1 - torch.eye(x.shape[-1])).to(x.device)
+    mask = (1 - torch.eye(x.shape[-1])).type_as(x)
     return x * mask
 
 

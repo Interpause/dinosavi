@@ -84,7 +84,7 @@ class ConvRNN(nn.Module):
             # NOTE: Following concepts from Slot Attention, learning a distribution
             # for the initial hidden state might be interesting.
             h = [
-                torch.zeros(len(x), self.hid_dim, *x.shape[-2:]).to(x.device)
+                torch.zeros(len(x), self.hid_dim, *x.shape[-2:]).type_as(x)
                 for _ in self.cells
             ]
 

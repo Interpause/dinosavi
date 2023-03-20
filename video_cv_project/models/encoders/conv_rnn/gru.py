@@ -28,10 +28,10 @@ class ConvGRUCell(ConvRNNCellBase):
         super(ConvGRUCell, self).__init__(in_dim, hid_dim, size)
 
         self.conv_gates = nn.Conv2d(
-            in_dim + hid_dim, 2 * hid_dim, self.size, padding=self.pad
+            in_dim + hid_dim, 2 * hid_dim, self.size, padding="same"
         )
         self.conv_candidate = nn.Conv2d(
-            in_dim + hid_dim, hid_dim, self.size, padding=self.pad
+            in_dim + hid_dim, hid_dim, self.size, padding="same"
         )
 
     def forward(self, x: torch.Tensor, h: torch.Tensor):

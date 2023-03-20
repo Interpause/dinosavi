@@ -98,7 +98,8 @@ class CRW(nn.Module):
         B, _, N = x.shape[:3]
         x = E.rearrange(x, "b t n c h w -> (b n) t c h w")
         maps: torch.Tensor = self.encoder(x)
-        maps = F.dropout(maps, p=self.feat_dropout, training=self.training)
+        # I don't see how dropout helps. Original had dropout here but didn't use it.
+        # maps = F.dropout(maps, p=self.feat_dropout, training=self.training)
 
         # Use image latent map as nodes.
         if N == 1:

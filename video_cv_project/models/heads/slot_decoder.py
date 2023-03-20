@@ -5,9 +5,12 @@ from typing import Tuple
 import einops as E
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from positional_encodings.torch_encodings import PositionalEncoding2D
 
-__all__ = ["CrossSlotSBDecoder"]
+from .cnn import CNN
+
+__all__ = ["CrossSlotDecoder", "SlotDecoder", "AlphaSlotDecoder"]
 
 
 class SpatialBroadcast(nn.Module):
@@ -36,59 +39,53 @@ class SpatialBroadcast(nn.Module):
             x (torch.Tensor): BC latent feature to broadcast.
 
         Returns:
-            torch.Tensor: BHWC broadcasted feature map.
+            torch.Tensor: BCHW broadcasted feature map.
         """
         h, w = self.size
         x = E.repeat(x, "b c -> b h w c", h=h, w=w)
         enc = self.pe(x)
-        return torch.concat((enc, x), dim=3)
+        x = torch.cat((enc, x), dim=3)
+        # Official implementation uses Linear Positional Encoding.
+        # gx, gy = torch.meshgrid(
+        #     torch.linspace(-1, 1, w), torch.linspace(-1, 1, h), indexing="ij"
+        # )
+        # gx = E.repeat(gx, "h w -> b h w 1", b=len(x))
+        # gy = E.repeat(gy, "h w -> b h w 1", b=len(x))
+        # x = torch.cat((gx, gy, x), dim=3)
+        return E.rearrange(x, "b h w c -> b c h w")
 
 
-class CrossSlotSBDecoder(nn.Module):
-    """Cross-Attention across Slots Spatial Broadcast Decoder."""
+class SlotDecoder(nn.Module):
+    """Spatial Broadcast Slot Decoder."""
 
-    # TODO: hid_dim & kernel_size can be customized per layer similar to torchvision.ops.MLP.
-    # TODO: Should we add some form of normalization, activation & dropout? Other implementations don't seem to do it.
     def __init__(
         self,
         slot_dim: int,
         size: Tuple[int, int, int],
         depth: int = 3,
-        kernel_size: int | Tuple[int, int] = 4,
+        kernel_size: int | Tuple[int, int] = 5,
         hid_dim: int = 256,
         pe_dim: int = 4,
     ):
-        """Initialize Cross-Attention Spatial Broadcast Decoder.
+        """Initialize Spatial Broadcast Slot Decoder.
 
         Args:
             slot_dim (int): Size of each slot.
-            size (Tuple[int, int, int]): Size (H, W, C) of the feature map to broadcast to.
+            size (Tuple[int, int, int]): Size (C, H, W) of the feature map to broadcast to.
             depth (int, optional): Number of layers in the decoder.
             kernel_size (int | Tuple[int, int], optional): Kernel size of the decoder.
             hid_dim (int, optional): Hidden dimension of the decoder.
             pe_dim (int, optional): Size of the positional encodings.
         """
-        super(CrossSlotSBDecoder, self).__init__()
+        super(SlotDecoder, self).__init__()
 
         self.size = size
-        self.kernel_size = (
-            (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
-        )
-        self.pad = self.kernel_size[0] // 2, self.kernel_size[1] // 2
+        self.kernel_size = kernel_size
 
-        self.broadcast = SpatialBroadcast(size[:2], pe_dim)
+        self.broadcast = SpatialBroadcast(size[-2:], pe_dim)
 
-        # TODO: Cross-attention implementation.
-        # After cross-attention, should the dim be slot_dim or hid_dim or something else?
-        self.attn = nn.Identity()
-
-        dims = [slot_dim + pe_dim] + [hid_dim] * (depth - 1) + [size[-1]]
-        self.conv = nn.Sequential(
-            *(
-                nn.Conv2d(i, o, kernel_size, padding=self.pad)
-                for i, o in zip(dims, dims[1:])
-            )
-        )
+        dims = [slot_dim + pe_dim] + [hid_dim] * (depth - 1) + [size[0]]
+        self.conv = CNN(dims, kernel_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -97,10 +94,60 @@ class CrossSlotSBDecoder(nn.Module):
             x (torch.Tensor): BSC slots.
 
         Returns:
-            torch.Tensor: BHWC decoded feature map.
+            torch.Tensor: BCHW decoded feature map.
+        """
+        raise NotImplementedError
+
+
+class AlphaSlotDecoder(SlotDecoder):
+    """Use "alpha" channel to blend decoded slots maps together."""
+
+    def __init__(self, slot_dim, size, *args, **kwargs):
+        """Refer to `video_cv_project.models.heads.SlotDecoder`."""
+        size = (size[0] + 1, *size[-2:])
+        super(AlphaSlotDecoder, self).__init__(slot_dim, size, *args, **kwargs)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): BSC slots.
+
+        Returns:
+            torch.Tensor: BCHW decoded feature map.
+        """
+        B = len(x)
+        x = E.rearrange(x, "b s c -> (b s) c")
+        x = self.broadcast(x)
+        x = self.conv(x)
+        x = E.rearrange(x, "(b s) c h w -> b c h w s", b=B)
+        # Transparencies for each slot S is the last channel.
+        alpha = F.softmax(x[:, -1:], dim=-1)
+        return E.reduce(x[:, :-1] * alpha, "b c h w s -> b c h w", "sum")
+
+
+class CrossSlotDecoder(SlotDecoder):
+    """Cross-Attention across Slots Spatial Broadcast Decoder."""
+
+    def __init__(self, *args, **kwargs):
+        """Refer to `video_cv_project.models.heads.SlotDecoder`."""
+        super(CrossSlotDecoder, self).__init__(*args, **kwargs)
+
+        # TODO: Cross-attention implementation.
+        # After cross-attention, should the dim be slot_dim or hid_dim or something else?
+        self.attn = nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): BSC slots.
+
+        Returns:
+            torch.Tensor: BCHW decoded feature map.
         """
         # BSC -> BC
         x = self.attn(x)
-        # BC -> BHWC
+        # BC -> BCHW
         x = self.broadcast(x)
         return self.conv(x)

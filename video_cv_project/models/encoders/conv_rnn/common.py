@@ -23,7 +23,6 @@ class ConvRNNCellBase(nn.Module):
         super(ConvRNNCellBase, self).__init__()
 
         self.size = (size, size) if isinstance(size, int) else size
-        self.pad = self.size[0] // 2, self.size[1] // 2  # Ensure same output size.
 
     def forward(self, x: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
         """Forward pass.

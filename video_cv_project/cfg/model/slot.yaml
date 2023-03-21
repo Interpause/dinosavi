@@ -1,0 +1,20 @@
+# Config for SlotCPC model.
+
+time_steps: 2
+_target_: video_cv_project.models.SlotCPC
+model:
+  _target_: video_cv_project.models.SlotModel
+  hid_dim: 384
+  slot_dim: 512
+  slot_hid_dim: 512
+  encoder:
+    _target_: transformers.ViTModel.from_pretrained
+    pretrained_model_name_or_path: facebook/dino-vits16
+    add_pooling_layer: false
+decoder:
+  _target_: video_cv_project.models.heads.AlphaSlotDecoder
+  slot_dim: 512
+  # TODO: This is auto-detectable, just no nice way to past to decoder init.
+  size: [384, 14, 14]
+  depth: 2
+  hid_dim: 384

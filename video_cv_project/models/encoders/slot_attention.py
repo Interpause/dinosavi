@@ -105,6 +105,6 @@ class SlotAttention(nn.Module):
             q = self.project_q(self.norm_slots(slots))
             attn = F.scaled_dot_product_attention(q, k, v)
             slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)
-            slots += self.mlp(self.norm_mlp(slots))  # Residual.
+            slots = slots + self.mlp(self.norm_mlp(slots))  # Residual.
 
         return slots

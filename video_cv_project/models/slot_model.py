@@ -107,11 +107,14 @@ class SlotCPC(nn.Module):
         )
         self.layernorm = nn.LayerNorm(model.feat_dim)
 
-    def forward(self, vid: torch.Tensor):
+    def forward(self, vid: torch.Tensor) -> Tuple[torch.Tensor, dict]:
         """Forward pass.
 
         Args:
             vid (torch.Tensor): BTCHW image tensor.
+
+        Returns:
+            Tuple[torch.Tensor, dict]: Loss, metrics.
         """
         vid = E.rearrange(vid, " b t c h w -> t b c h w")
 

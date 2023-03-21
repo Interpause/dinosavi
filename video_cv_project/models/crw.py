@@ -7,6 +7,7 @@ from functools import partial
 from typing import Dict
 
 import einops as E
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -184,7 +185,7 @@ class CRW(nn.Module):
             Tuple[torch.Tensor, dict]: Loss and debug info.
         """
         losses = []
-        debug: dict = {}
+        debug: dict = {"acc": 0.0}
 
         # If no target is given, assume palindrome.
         _i = [*walks.values()][0]
@@ -206,6 +207,7 @@ class CRW(nn.Module):
             debug[f"loss/{name}"] = float(loss)
             debug[f"acc/{name}"] = float(logits.argmax(-1).eq(target).float().mean())
 
+        debug["acc"] = np.mean([v for k, v in debug.items() if "acc" in k])  # type: ignore
         return torch.stack(losses).mean(), debug
 
     def forward(self, x: torch.Tensor, tgts: torch.Tensor = None):
@@ -216,10 +218,10 @@ class CRW(nn.Module):
             tgts (torch.Tensor, optional): BN target patch class ids. Defaults to None.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor, dict]: BTNC node features, loss, and debug info.
+            Tuple[torch.Tensor, dict]: Loss, metrics.
         """
         # TODO: Add patches to debug info for visualization.
         feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks, tgts)
-        return feats, loss, debug
+        return loss, debug

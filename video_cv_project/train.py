@@ -93,18 +93,23 @@ def train(cfg: DictConfig):
 
     ini_epoch = checkpointer.epoch
     log.info(f"Start training for {epochs} epochs.")
-    for i, n, (video, target) in trainer:
-        video = video.to(device)
-        target = target.to(device)
-        _, loss, debug = model(video, target)
+    with torch.autograd.set_detect_anomaly(True):
+        for i, n, data in trainer:
+            video, target = data if isinstance(data, tuple) else (data, None)
+            video = video.to(device)
 
-        avg_acc = np.mean([v for k, v in debug.items() if "acc" in k])  # type: ignore
-        trainer.update(
-            loss=float(loss), acc=avg_acc, lr=float(scheduler.get_last_lr()[0]), **debug
-        )
-        checkpointer.epoch = ini_epoch + i
+            if target is None:
+                loss, debug = model(video)
+            else:
+                target = target.to(device)
+                loss, debug = model(video, target)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
+            trainer.update(
+                loss=float(loss), lr=float(scheduler.get_last_lr()[0]), **debug
+            )
+            checkpointer.epoch = ini_epoch + i
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()

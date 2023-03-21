@@ -5,11 +5,12 @@ defaults:
   - override /data: kinetics400
   - override /data/transform: train-dino
   - override /model: slot
+  - _self_
 
 mode: train
 
 train:
-  epochs: 1
+  epochs: 3
 
   log_every: 20
   save_every: 500
@@ -23,4 +24,14 @@ train:
     _target_: torch.optim.lr_scheduler.OneCycleLR
     max_lr: ${..optimizer.lr}
     total_steps: ${total_steps}
-    pct_start: 0.05
+    pct_start: 0.1
+
+data:
+  batch_size: 12
+  num_workers: 12
+  dataset:
+    frames_per_clip: 32
+    step_between_clips: 24
+
+  sampler:
+    max_clips_per_video: 100

@@ -17,7 +17,30 @@ from video_cv_project.models.heads import SlotDecoder
 __all__ = ["SlotModel", "SlotCPC"]
 
 
-# TODO: Come up with name.
+class SlotPredictor(nn.Module):
+    """Propagate slots temporally."""
+
+    def __init__(self, slot_dim: int = 512, num_heads: int = 4):
+        """Initialize SlotPredictor."""
+        super(SlotPredictor, self).__init__()
+
+        self.attn = nn.MultiheadAttention(slot_dim, num_heads, batch_first=True)
+        self.mlp = nn.Linear(slot_dim, slot_dim)
+        self.ln_attn = nn.LayerNorm(slot_dim)
+        self.ln_mlp = nn.LayerNorm(slot_dim)
+
+    def forward(self, slots: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            slots (torch.Tensor): BSC slots.
+
+        Returns:
+            torch.Tensor: BSC slots.
+        """
+        slots = self.ln_attn(slots + self.attn(slots, slots, slots)[0])
+        slots = self.ln_mlp(slots + self.mlp(slots).relu())
+        return slots
 
 
 class SlotModel(nn.Module):
@@ -30,6 +53,7 @@ class SlotModel(nn.Module):
         hid_dim: int = 512,
         slot_dim: int = 512,
         slot_hid_dim: int = 768,
+        slot_predict_heads: int = 4,
     ):
         """Initialize SlotModel."""
         super(SlotModel, self).__init__()
@@ -42,10 +66,11 @@ class SlotModel(nn.Module):
             slot_dim=slot_dim,
             hid_dim=slot_hid_dim,
         )
+        self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
 
         self.pe = PositionalEncoding2D(pe_dim)
         enc_chns = self.encoder.config.hidden_size + pe_dim
-        self.pat_mlp = MLP(in_channels=enc_chns, hidden_channels=[hid_dim] * 1)
+        self.pat_mlp = nn.Linear(enc_chns, hid_dim)
 
         self.pe_dim = pe_dim
         self.hid_dim = hid_dim
@@ -84,7 +109,12 @@ class SlotModel(nn.Module):
 
         # Run MLP after concating position encodings.
         x = E.rearrange(x, "b h w c -> b (h w) c")
+        # self.pat_mlp might be problematic? Need LayerNorm? Activation? Residual?
         x = self.pat_mlp(x)
+
+        # Update slots temporally.
+        if slots is not None:
+            slots = self.predictor(slots)
 
         # Bind slots to features.
         slots = self.attn(x, slots=slots, num_slots=num_slots, num_iters=num_iters)
@@ -95,7 +125,14 @@ class SlotModel(nn.Module):
 class SlotCPC(nn.Module):
     """SlotCPC trainer."""
 
-    def __init__(self, model: SlotModel, decoder: SlotDecoder, time_steps: int = 2):
+    def __init__(
+        self,
+        model: SlotModel,
+        decoder: SlotDecoder,
+        time_steps: int = 2,
+        num_slots: int = 7,
+        num_iters: int = 2,
+    ):
         """Initialize SlotCPC."""
         super(SlotCPC, self).__init__()
 
@@ -106,6 +143,8 @@ class SlotCPC(nn.Module):
             nn.Linear(model.slot_dim, model.slot_dim) for _ in range(time_steps + 1)
         )
         self.layernorm = nn.LayerNorm(model.feat_dim)
+        self.num_slots = num_slots
+        self.num_iters = num_iters
 
     def forward(self, vid: torch.Tensor) -> Tuple[torch.Tensor, dict]:
         """Forward pass.
@@ -122,7 +161,9 @@ class SlotCPC(nn.Module):
         pats_t = []
         cur_slots = None
         for im in vid:
-            cur_slots, cur_pats = self.model(im, slots=cur_slots)
+            cur_slots, cur_pats = self.model(
+                im, slots=cur_slots, num_slots=self.num_slots, num_iters=self.num_iters
+            )
             slots_t.append(cur_slots)
             pats_t.append(cur_pats)
         slots_t = torch.stack(slots_t)  # TBSC

@@ -2,22 +2,20 @@
 
 import logging
 
-import numpy as np
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf, open_dict
-from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import create_kinetics_dataloader
 from video_cv_project.engine import Checkpointer, Trainer
-from video_cv_project.utils import get_dirs, perf_hack
+from video_cv_project.utils import get_dirs, get_model_summary, perf_hack
 
 log = logging.getLogger(__name__)
 
 CKPT_FOLDER = "weights"
 MODEL_NAME = f"epoch%d_%d.ckpt"
-SAMPLE_INPUT = [1, 8, 49, 3, 64, 64]
+
 
 # TODO: More metadata about input mode like patch size, number of patches, shape, etc.
 # TODO: Distributed training wait who am i kidding.
@@ -41,9 +39,8 @@ def train(cfg: DictConfig):
 
     log.debug("Create Model.")
     model = instantiate(cfg.model)
-    model_summary = summary(model, SAMPLE_INPUT, verbose=0, col_width=20, device=device)
-    model_summary.formatting.layer_name_width = 30
-    log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
+    summary = get_model_summary(model, device=device)
+    log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
 
     log.debug("Create Train Dataloader.")
     dataloader = create_kinetics_dataloader(cfg)

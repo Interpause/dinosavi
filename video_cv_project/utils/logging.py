@@ -13,7 +13,7 @@ from rich.progress import (
 )
 from rich.prompt import Confirm
 
-__all__ = ["pretty", "get_dirs", "iter_pbar", "confirm_ask"]
+__all__ = ["pretty", "get_dirs", "iter_pbar", "confirm_ask", "get_model_summary"]
 
 
 class TaskSpeed(ProgressColumn):
@@ -51,3 +51,18 @@ def confirm_ask(*args, pbar=iter_pbar, **kwargs):
     res = Confirm.ask(*args, **kwargs)
     pbar.start()
     return res
+
+
+def get_model_summary(
+    model, sizes=((1, 8, 49, 3, 64, 64), (1, 8, 3, 224, 224)), device=None
+):
+    """Get model summary."""
+    from torchinfo import summary
+
+    for size in sizes:
+        try:
+            model_summary = summary(model, size, verbose=0, col_width=20, device=device)
+        except:
+            continue
+        model_summary.formatting.layer_name_width = 30
+        return model_summary

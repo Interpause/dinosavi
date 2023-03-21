@@ -6,17 +6,14 @@ from time import time
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from torchinfo import summary
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
-from video_cv_project.utils import get_dirs, perf_hack, delete_layers
+from video_cv_project.utils import delete_layers, get_dirs, get_model_summary, perf_hack
 
 log = logging.getLogger(__name__)
-
-SAMPLE_INPUT = [1, 8, 3, 320, 320]
 
 
 def eval(cfg: DictConfig):
@@ -35,11 +32,8 @@ def eval(cfg: DictConfig):
     model: CRW = instantiate(cfg.model)
     delete_layers(model, ["head"])
     encoder = model.encoder
-    model_summary = summary(
-        encoder, SAMPLE_INPUT, verbose=0, col_width=20, device=device
-    )
-    model_summary.formatting.layer_name_width = 30
-    log.info(f"Model Summary for Input Shape {SAMPLE_INPUT}:\n{model_summary}")
+    summary = get_model_summary(model, device=device)
+    log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
     log.info(f"Model scale: {model.map_scale}")
 
     log.debug("Create Eval Dataloader.")

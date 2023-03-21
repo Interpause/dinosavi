@@ -22,7 +22,6 @@ class SlotAttention(nn.Module):
     def __init__(
         self,
         in_feats: int,
-        num_iters: int = 3,
         slot_dim: int = 64,
         hid_dim: int = 128,
     ):
@@ -30,13 +29,11 @@ class SlotAttention(nn.Module):
 
         Args:
             in_feats (int): Number of input features.
-            num_iters (int, optional): Number of iterations for slots to bind.
             slot_dim (int, optional): Size of representations in each slot.
             hid_dim (int, optional): Size of hidden layer in MLP.
         """
         super(SlotAttention, self).__init__()
 
-        self.num_iters = num_iters
         self.in_feats = in_feats
         self.slot_dim = slot_dim
         self.hid_dim = hid_dim
@@ -82,7 +79,11 @@ class SlotAttention(nn.Module):
         ).type_as(x)
 
     def forward(
-        self, x: torch.Tensor, slots: torch.Tensor = None, num_slots: int = 7
+        self,
+        x: torch.Tensor,
+        slots: torch.Tensor = None,
+        num_slots: int = 7,
+        num_iters: int = 3,
     ) -> torch.Tensor:
         """Forward pass.
 
@@ -90,6 +91,7 @@ class SlotAttention(nn.Module):
             x (torch.Tensor): BNC input features.
             slots (torch.Tensor, optional): BSC slots from previous time step.
             num_slots (int, optional): Number of slots to create. Ignored if ``slots`` is provided.
+            num_iters (int, optional): Number of iterations for slots to bind.
 
         Returns:
             torch.Tensor: BSC slots.
@@ -99,7 +101,7 @@ class SlotAttention(nn.Module):
         k, v = self.project_kv(x).split(self.slot_dim, dim=2)
 
         # Multiple rounds of attention for slots to bind.
-        for _ in range(self.num_iters):
+        for _ in range(num_iters):
             q = self.project_q(self.norm_slots(slots))
             attn = F.scaled_dot_product_attention(q, k, v)
             slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)

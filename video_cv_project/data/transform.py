@@ -16,6 +16,7 @@ __all__ = [
     "MapTransform",
     "PatchSplitTransform",
     "PatchAndJitter",
+    "HFViTTransform",
 ]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
@@ -159,6 +160,52 @@ class _ToTensor:
     def __repr__(self):
         """Return string representation of class."""
         return f"{self.__class__.__name__}()"
+
+
+class HFViTTransform:
+    """Wrapper over HuggingFace `ViTImageProcessor`."""
+
+    # NOTE: `ViTImageProcessor` has smart detection of whether image is [0,1] or [0,255].
+    # So don't have to worry about re-scaling the channels.
+
+    def __init__(self, name=None, **kwargs):
+        """Create HFViTTransform.
+
+        If ``name`` is None, then `ViTImageProcessor` will not be initialized based
+        on any particular model. ``name`` is passed to `ViTImageProcessor.from_pretrained`,
+        meaning all its tricks like loading from a local file is possible.
+
+        Args:
+            name (str, optional): Name of ViT model to base configuration on. Defaults to None.
+        """
+        from transformers import ViTImageProcessor
+
+        # For string repr.
+        self.kwargs = dict(kwargs)
+        self.kwargs["name"] = name
+
+        self._p = (
+            ViTImageProcessor(**kwargs)
+            if name is None
+            else ViTImageProcessor.from_pretrained(name, **kwargs)
+        )
+
+    def __call__(self, x):
+        """Process image.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Processed tensor.
+        """
+        # Since only CHW images given when used in `create_pipeline`, there's extra batch dimension.
+        return self._p(x, return_tensors="pt").pixel_values[0]
+
+    def __repr__(self):
+        """Return string representation of class."""
+        args = ", ".join(f'{k}="{v}"' for k, v in self.kwargs.items())
+        return f"{self.__class__.__name__}({args})"
 
 
 def create_pipeline(

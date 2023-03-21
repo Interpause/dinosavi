@@ -1,0 +1,13 @@
+# Config file for train pipeline for DINO ViT model.
+
+defaults:
+  # Base pipeline config.
+  - base
+
+im_transforms:
+  - _target_: video_cv_project.data.transform.HFViTTransform
+    name: facebook/dino-vits16
+
+pipeline:
+  # Normalization already done in HFViTTransform.
+  do_rgb_norm: false

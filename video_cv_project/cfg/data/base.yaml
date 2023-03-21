@@ -14,4 +14,4 @@ dataloader:
   num_workers: ${..num_workers}
   pin_memory: true
   # timeout: 60
-  prefetch_factor: 2
+  prefetch_factor:

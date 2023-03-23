@@ -61,8 +61,9 @@ def create_resnet_encoder(
             f"{name} isn't explicitly supported. Pretrained weights may change depending on torchvision `DEFAULT` version."
         )
 
-    weights = SUPPORTED_RESNET_VARIANTS.get(name, "DEFAULT") if weights is ... else weights
-    # TODO: When using empty model, init parameters are random (should not be for reproducibility).
+    weights = (
+        SUPPORTED_RESNET_VARIANTS.get(name, "DEFAULT") if weights is ... else weights
+    )
     model = get_model(name, weights=weights, **kwargs)
     # print(weights, next(model.parameters()).data.sum())
 

@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from positional_encodings.torch_encodings import PositionalEncoding2D
-from torchvision.ops import MLP
 from transformers import ViTModel
 
 from video_cv_project.models.encoders import SlotAttention
@@ -18,10 +17,18 @@ __all__ = ["SlotModel", "SlotCPC"]
 
 
 class SlotPredictor(nn.Module):
-    """Propagate slots temporally."""
+    """Propagate slots temporally.
+
+    This is what SAVi did, but we might mess with this later.
+    """
 
     def __init__(self, slot_dim: int = 512, num_heads: int = 4):
-        """Initialize SlotPredictor."""
+        """Initialize SlotPredictor.
+
+        Args:
+            slot_dim (int, optional): Size of each slot. Defaults to 512.
+            num_heads (int, optional): Number of attention heads. Defaults to 4.
+        """
         super(SlotPredictor, self).__init__()
 
         self.attn = nn.MultiheadAttention(slot_dim, num_heads, batch_first=True)
@@ -44,46 +51,54 @@ class SlotPredictor(nn.Module):
 
 
 class SlotModel(nn.Module):
-    """This is the part used both during training & evaluation."""
+    """This is the part used during both training & evaluation."""
 
     def __init__(
         self,
         encoder: ViTModel,
         pe_dim: int = 4,
-        hid_dim: int = 512,
         slot_dim: int = 512,
         slot_hid_dim: int = 768,
         slot_predict_heads: int = 4,
     ):
-        """Initialize SlotModel."""
+        """Initialize SlotModel.
+
+        Args:
+            encoder (ViTModel): Model used to encode frames.
+            pe_dim (int, optional): Size of positional encoding. Defaults to 4.
+            slot_dim (int, optional): Size of each slot. Defaults to 512.
+            slot_hid_dim (int, optional): Size of hidden layer in `SlotAttention`. Defaults to 768.
+            slot_predict_heads (int, optional): Number of attention heads in `SlotPredictor`. Defaults to 4.
+        """
         super(SlotModel, self).__init__()
 
         self.encoder = encoder
         self.encoder.requires_grad_(False)  # Freeze encoder.
 
+        feat_dim = encoder.config.hidden_size
+        enc_chns = feat_dim + pe_dim
+
         self.attn = SlotAttention(
-            in_feats=hid_dim,
+            in_feats=feat_dim,
             slot_dim=slot_dim,
             hid_dim=slot_hid_dim,
         )
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
 
         self.pe = PositionalEncoding2D(pe_dim)
-        enc_chns = self.encoder.config.hidden_size + pe_dim
-        self.pat_mlp = nn.Linear(enc_chns, hid_dim)
+        self.pat_mlp = nn.Linear(enc_chns, feat_dim)
 
         self.pe_dim = pe_dim
-        self.hid_dim = hid_dim
         self.slot_dim = slot_dim
         self.slot_hid_dim = slot_hid_dim
-        self.feat_dim = encoder.config.hidden_size
+        self.feat_dim = feat_dim
 
     def forward(
         self,
         im: torch.Tensor,
         slots: torch.Tensor = None,
         num_slots: int = 7,
-        num_iters: int = 2,
+        num_iters: int = 3,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
@@ -131,9 +146,17 @@ class SlotCPC(nn.Module):
         decoder: SlotDecoder,
         time_steps: int = 2,
         num_slots: int = 7,
-        num_iters: int = 2,
+        num_iters: int = 3,
     ):
-        """Initialize SlotCPC."""
+        """Initialize SlotCPC.
+
+        Args:
+            model (SlotModel): Slot model.
+            decoder (SlotDecoder): Decodes slot to features.
+            time_steps (int, optional): Time steps to predict (excluding t+0). Defaults to 2.
+            num_slots (int, optional): Number of slots to create. Defaults to 7.
+            num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
+        """
         super(SlotCPC, self).__init__()
 
         self.model = model
@@ -194,6 +217,8 @@ class SlotCPC(nn.Module):
             logits_t = E.einsum(x, y, "t x c, t y c -> t x y")
 
             # Should have 1-1 correspondence between x and y.
+            # TODO: This is actually wrong, nearby patches should be similar, so
+            # the labels should be soft.
             labels = torch.arange(logits_t.shape[-1]).to(logits_t.device)
 
             for i, logits in enumerate(logits_t):

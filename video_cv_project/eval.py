@@ -11,7 +11,7 @@ from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
-from video_cv_project.utils import delete_layers, get_dirs, get_model_summary, perf_hack
+from video_cv_project.utils import delete_layers, get_dirs, get_model_summary
 
 log = logging.getLogger(__name__)
 
@@ -19,8 +19,6 @@ log = logging.getLogger(__name__)
 def eval(cfg: DictConfig):
     """Evaluate model."""
     assert cfg.resume is not None, "Must provide resume path in eval mode."
-    perf_hack()
-
     root_dir, out_dir = get_dirs()
 
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)

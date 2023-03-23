@@ -27,11 +27,15 @@ def main(cfg: DictConfig):
     try:
         if cfg.mode == "train":
             from video_cv_project.train import train
+            from video_cv_project.utils import perf_hack
 
+            perf_hack()
             train(cfg)
         elif cfg.mode == "eval":
             from video_cv_project.eval import eval
+            from video_cv_project.utils import perf_hack
 
+            perf_hack()
             eval(cfg)
         elif cfg.mode == "help":
             log.critical("Add `--help` for help message.")

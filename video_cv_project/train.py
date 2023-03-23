@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import create_kinetics_dataloader
 from video_cv_project.engine import Checkpointer, Trainer
-from video_cv_project.utils import get_dirs, get_model_summary, perf_hack
+from video_cv_project.utils import get_dirs, get_model_summary
 
 log = logging.getLogger(__name__)
 
@@ -23,8 +23,6 @@ MODEL_NAME = f"epoch%d_%d.ckpt"
 
 def train(cfg: DictConfig):
     """Train model."""
-    perf_hack()
-
     root_dir, out_dir = get_dirs()
     ckpt_dir = out_dir / CKPT_FOLDER
     ckpt_dir.mkdir(exist_ok=False)  # Error if exists to prevent model overwrite.

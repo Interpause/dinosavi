@@ -15,6 +15,9 @@ from video_cv_project.models.heads import SlotDecoder
 
 __all__ = ["SlotModel", "SlotCPC"]
 
+# TODO: Test if DINO/ViT embeddings retain positional information.
+EXTRA_PE = False
+
 
 class SlotPredictor(nn.Module):
     """Propagate slots temporally.
@@ -116,16 +119,19 @@ class SlotModel(nn.Module):
         # Encoder image to get features for each patch.
         y = self.encoder(im, interpolate_pos_encoding=True)
         cls, pats = y.last_hidden_state[:, 0], y.last_hidden_state[:, 1:]
-
-        # Concat positional encodings to the patches.
         pats = E.rearrange(pats, "b (h w) c -> b h w c", h=h, w=w)
-        enc = self.pe(pats)
-        x = torch.cat((enc, pats), dim=-1)
 
-        # Run MLP after concating position encodings.
-        x = E.rearrange(x, "b h w c -> b (h w) c")
-        # self.pat_mlp might be problematic? Need LayerNorm? Activation? Residual?
-        x = self.pat_mlp(x)
+        if EXTRA_PE:
+            # Concat positional encodings to the patches.
+            enc = self.pe(pats)
+            x = torch.cat((enc, pats), dim=-1)
+
+            # Run MLP after concating position encodings.
+            x = E.rearrange(x, "b h w c -> b (h w) c")
+            # Slot prenorms input, no normalization needed here.
+            x = self.pat_mlp(x)
+        else:
+            x = E.rearrange(pats, "b h w c -> b (h w) c")
 
         # Update slots temporally.
         if slots is not None:

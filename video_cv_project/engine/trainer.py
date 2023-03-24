@@ -3,6 +3,7 @@
 import logging
 import signal
 from multiprocessing import parent_process
+from time import time
 
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -76,10 +77,16 @@ class Trainer:
             self.pbar.start()
             for i in range(1, self.epochs + 1):
                 self.pbar.reset(self._itask)
+                data_t, infer_t = 0.0, 0.0
+                t_data, t_infer = time(), 0.0
                 for n, data in enumerate(self.dataloader, start=1):
-                    yield i, n, data
+                    data_t = time() - t_data
 
-                    self.update(epoch=i, iteration=n)
+                    t_infer = time()
+                    yield i, n, data
+                    infer_t = time() - t_infer
+
+                    self.update(epoch=i, iteration=n, data_t=data_t, infer_t=infer_t)
                     self.pbar.advance(self._itask)
                     self._log()
 
@@ -93,6 +100,8 @@ class Trainer:
                         ):
                             raise KeyboardInterrupt
                         is_interrupted = False
+
+                    t_data = time()
 
                 self.save_func(i, n)
                 self.pbar.advance(self._etask)

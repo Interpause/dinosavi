@@ -6,13 +6,12 @@ import einops as E
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from positional_encodings.torch_encodings import PositionalEncodingPermute2D
 from transformers import ViTModel
 
 from video_cv_project.models.encoders import SlotAttention
 from video_cv_project.models.heads import SlotDecoder
-from video_cv_project.utils import create_crw_target as create_target
+from video_cv_project.utils import infoNCE_loss
 
 __all__ = ["SlotModel", "SlotCPC"]
 
@@ -225,30 +224,6 @@ class SlotCPC(nn.Module):
         preds = E.rearrange(preds, "t b s (p c) -> (p t b) s c", p=self.num_preds)
         return self.decoder(preds)  # (PTB)CHW
 
-    def _calc_loss(self, x: torch.Tensor, y: torch.Tensor):
-        """Calculate InfoNCE loss."""
-        # Cosine similarity.
-        x = F.normalize(x, p=2, dim=-1)
-        y = F.normalize(y, p=2, dim=-1)
-        logits_p = E.einsum(x, y, "p t x c, p t y c -> p t x y")
-        # `einops` doesn't support rearrange in einsum yet.
-        logits_p = E.rearrange(logits_p, "p t x y -> p (t x) y")
-
-        # Labels for 1-1 correspondence between x and y.
-        # TODO: This is actually wrong, nearby patches should be similar, so the
-        # labels should be soft.
-        labels = create_target(x.shape[1], x.shape[2], x.device)
-
-        # Calculate loss for each prediction (t+0, t+1, t+2, ...) separately for
-        # metric logging.
-        debug = {}
-        losses = []
-        for i, logits in enumerate(logits_p):
-            loss = F.cross_entropy(logits, labels)
-            losses.append(loss)
-            debug[f"loss/t+{i}"] = float(loss)
-        return torch.stack(losses).mean(), debug
-
     def forward(self, vid: torch.Tensor) -> Tuple[torch.Tensor, dict]:
         """Forward pass.
 
@@ -273,4 +248,4 @@ class SlotCPC(nn.Module):
         y = pats_t[idx]
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 
-        return self._calc_loss(x, y)
+        return infoNCE_loss(x, y)

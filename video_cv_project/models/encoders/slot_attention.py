@@ -7,57 +7,15 @@ Some modifications were made, namely:
 - Uses `F.scaled_dot_product_attention` for more performance.
 """
 
-from typing import Tuple
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
+from video_cv_project.utils import inverted_scaled_mean_attention
 
 __all__ = ["SlotAttention"]
 
+
 # TODO: It is possible to use multi-head attention.
-
-
-def _slot_attention(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    mask: torch.Tensor = None,
-    dropout_p: float = 0.0,
-    eps: float = 1e-12,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Inverted, scaled dot product attention with weighted mean.
-
-    See `torch.nn.functional.scaled_dot_product_attention` for documentation. Instead
-    of calculating attention weights over the keys, it is done over the queries.
-    Furthermore, instead of doing a weighted sum, a weighted mean is done instead
-    to get the final output.
-
-    Args:
-        q (torch.Tensor): *LE query.
-        k (torch.Tensor): *SE key.
-        v (torch.Tensor): *SE value.
-        mask (torch.Tensor, optional): *LS attention mask.
-        dropout_p (float, optional): Dropout probability.
-        eps (float, optional): Epsilon value.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: *LE attention output, *LS attention weights.
-    """
-    m = (
-        torch.tensor(0)
-        if mask is None
-        else mask.masked_fill(mask.logical_not(), float("-inf"))
-        if mask.dtype == torch.bool
-        else mask
-    ).type_as(q)
-
-    w = weight = F.softmax(q @ k.mT / (q.size(-1) ** 0.5) + m, dim=-2)
-    w = w / (w.sum(dim=-1, keepdim=True) + eps)
-    w = F.dropout(w, dropout_p)
-    return w @ v, weight
-
-
 class SlotAttention(nn.Module):
     """Slot Attention Module."""
 
@@ -146,7 +104,7 @@ class SlotAttention(nn.Module):
         for _ in range(num_iters):
             q = self.project_q(self.norm_slots(slots))
             # TODO: Use weights to visualize slot bindings.
-            attn, weights = _slot_attention(q, k, v)
+            attn, weights = inverted_scaled_mean_attention(q, k, v)
             slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)
             slots = slots + self.mlp(self.norm_mlp(slots))  # Residual.
 

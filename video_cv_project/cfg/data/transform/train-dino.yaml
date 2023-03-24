@@ -5,7 +5,7 @@ defaults:
   - base
 
 im_transforms:
-  - _target_: video_cv_project.data.transform.HFViTTransform
+  - _target_: video_cv_project.data.transform.HFTransform
     name: facebook/dino-vits16
 
 pipeline:

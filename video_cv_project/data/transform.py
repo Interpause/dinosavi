@@ -16,7 +16,7 @@ __all__ = [
     "MapTransform",
     "PatchSplitTransform",
     "PatchAndJitter",
-    "HFViTTransform",
+    "HFTransform",
 ]
 
 # NOTE: Augmentations are random per frame so some don't make sense.
@@ -162,32 +162,32 @@ class _ToTensor:
         return f"{self.__class__.__name__}()"
 
 
-class HFViTTransform:
-    """Wrapper over HuggingFace `ViTImageProcessor`."""
+class HFTransform:
+    """Wrapper over HuggingFace `AutoImageProcessor`."""
 
-    # NOTE: `ViTImageProcessor` has smart detection of whether image is [0,1] or [0,255].
+    # NOTE: `AutoImageProcessor` has smart detection of whether image is [0,1] or [0,255].
     # So don't have to worry about re-scaling the channels.
 
     def __init__(self, name=None, **kwargs):
-        """Create HFViTTransform.
+        """Create HFTransform.
 
-        If ``name`` is None, then `ViTImageProcessor` will not be initialized based
-        on any particular model. ``name`` is passed to `ViTImageProcessor.from_pretrained`,
+        If ``name`` is None, then `AutoImageProcessor` will not be initialized based
+        on any particular model. ``name`` is passed to `AutoImageProcessor.from_pretrained`,
         meaning all its tricks like loading from a local file is possible.
 
         Args:
-            name (str, optional): Name of ViT model to base configuration on. Defaults to None.
+            name (str, optional): Name of model to load configuration on. Defaults to None.
         """
-        from transformers import ViTImageProcessor
+        from transformers import AutoImageProcessor
 
         # For string repr.
         self.kwargs = dict(kwargs)
         self.kwargs["name"] = name
 
         self._p = (
-            ViTImageProcessor(**kwargs)
+            AutoImageProcessor(**kwargs)
             if name is None
-            else ViTImageProcessor.from_pretrained(name, **kwargs)
+            else AutoImageProcessor.from_pretrained(name, **kwargs)
         )
 
     def __call__(self, x):

@@ -15,7 +15,8 @@ from video_cv_project.utils import infoNCE_loss
 
 __all__ = ["SlotModel", "SlotCPC"]
 
-# TODO: Test if DINO/ViT embeddings retain positional information.
+# TODO: Test if ViT embeddings retain positional information.
+# Might be dependent on pretraining method.
 EXTRA_PE = False
 
 

@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from .crw_utils import create_crw_target as create_target
 
-__all__ = ["inverted_scaled_mean_attention", "infoNCE_loss"]
+__all__ = ["inverted_scaled_mean_attention", "infoNCE_loss", "vicreg_loss"]
 
 
 def inverted_scaled_mean_attention(
@@ -17,7 +17,7 @@ def inverted_scaled_mean_attention(
     v: torch.Tensor,
     mask: torch.Tensor = None,
     dropout_p: float = 0.0,
-    eps: float = 1e-12,
+    eps: float = 1e-6,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Inverted, scaled dot product attention with weighted mean.
 
@@ -82,6 +82,79 @@ def infoNCE_loss(x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, dict]:
     losses = []
     for i, logits in enumerate(logits_p):
         loss = F.cross_entropy(logits, labels)
+        losses.append(loss)
+        debug[f"loss/t+{i}"] = float(loss)
+    return torch.stack(losses).mean(), debug
+
+
+def vicreg_loss(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    w_inv: float = 25.0,
+    w_var: float = 25.0,
+    w_cov: float = 1.0,
+    enc_frozen=True,
+    eps=1e-8,
+) -> Tuple[torch.Tensor, dict]:
+    """Modified VICReg loss for patch features.
+
+    Modified to accept PTNC features, where P is the predicted time step (i.e.,
+    t+0, t+1, t+2, ...), and T is the current time step (t=0, 1, 2, ...).
+
+    Note, the coefficient for Variance loss is 0 by default because for our model
+    there is no risk of collapse. This is because the encoder is frozen. Trying to
+    enforce variance when matching the encoder output might be counterproductive.
+
+    Actually, the Covariance loss is also counterproductive when the encoder is
+    frozen. This means VICReg becomes just MSE loss...
+
+    Args:
+        x (torch.Tensor): PTNC Predicted features.
+        y (torch.Tensor): PTNC Target features.
+        w_inv (float, optional): Invariance loss weight.
+        w_var (float, optional): Variance loss weight.
+        w_cov (float, optional): Covariance loss weight.
+        enc_frozen (bool, optional): Whether the encoder is frozen.
+        eps (float, optional): Epsilon value.
+
+    Returns:
+        Tuple[torch.Tensor, dict]: Loss, metrics.
+    """
+    # N is (B*H*W).
+    x = E.rearrange(x, "p t n c -> p (t n) c")
+    y = E.rearrange(y, "p t n c -> p (t n) c")
+
+    debug = {}
+    losses = []
+    for i, (a, b) in enumerate(zip(x, y)):
+        N, C = a.shape
+
+        # Invariance loss.
+        loss_inv = F.mse_loss(a, b)
+
+        if not enc_frozen:
+            # Variance loss.
+            # Theoretically, should be done with (P*T*N), not just (T*N).
+            std_a = (a.var(dim=0) + eps) ** 0.5
+            std_b = (b.var(dim=0) + eps) ** 0.5
+            loss_var = (F.relu(1 - std_a).mean() + F.relu(1 - std_b).mean()) / 2
+
+            # Covariance loss.
+            _a = a - a.mean(dim=0)
+            _b = b - b.mean(dim=0)
+            cov_a = (_a.T @ _a / (N - 1)) ** 2
+            cov_b = (_b.T @ _b / (N - 1)) ** 2
+            loss_cov = (
+                (cov_a.sum() - cov_a.diagonal().sum())
+                + (cov_b.sum() - cov_b.diagonal().sum())
+            ) / (2 * C)
+        else:
+            loss_var = torch.tensor(0).type_as(a)
+            loss_cov = torch.tensor(0).type_as(a)
+
+        # TODO: Log down each individual loss.
+        loss = w_inv * loss_inv + w_var * loss_var + w_cov * loss_cov
+
         losses.append(loss)
         debug[f"loss/t+{i}"] = float(loss)
     return torch.stack(losses).mean(), debug

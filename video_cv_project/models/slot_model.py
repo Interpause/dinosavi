@@ -11,7 +11,7 @@ from transformers import ViTModel
 
 from video_cv_project.models.encoders import SlotAttention
 from video_cv_project.models.heads import SlotDecoder
-from video_cv_project.utils import infoNCE_loss
+from video_cv_project.utils import infoNCE_loss, vicreg_loss
 
 __all__ = ["SlotModel", "SlotCPC"]
 
@@ -215,7 +215,7 @@ class SlotCPC(nn.Module):
         slots = None
         slots_t = [
             slots := self.model.calc_slots(p, slots, self.num_slots, self.num_iters)
-            for p in pats[: -self.time_steps]
+            for p in pats[: len(pats) - self.time_steps]
         ]
         return torch.stack(slots_t)  # TBSC
 
@@ -249,4 +249,5 @@ class SlotCPC(nn.Module):
         y = pats_t[idx]
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 
-        return infoNCE_loss(x, y)
+        # return infoNCE_loss(x, y)
+        return vicreg_loss(x, y)

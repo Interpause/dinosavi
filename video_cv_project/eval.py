@@ -30,7 +30,7 @@ def eval(cfg: DictConfig):
     model: CRW = instantiate(cfg.model)
     delete_layers(model, ["head"])
     encoder = model.encoder
-    summary = get_model_summary(model, device=device)
+    summary = get_model_summary(encoder, device=device)
     log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
     log.info(f"Model scale: {model.map_scale}")
 

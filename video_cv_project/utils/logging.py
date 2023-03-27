@@ -66,3 +66,4 @@ def get_model_summary(
             continue
         model_summary.formatting.layer_name_width = 30
         return model_summary
+    assert False, "No supported size!"

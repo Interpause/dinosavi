@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 from typing import Callable, Tuple
 
-import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader

@@ -184,6 +184,9 @@ class HFTransform:
         self.kwargs = dict(kwargs)
         self.kwargs["name"] = name
 
+        # See: https://github.com/huggingface/transformers/issues/22392
+        self._workaround = not self.kwargs.get("do_resize", True)
+
         self._p = (
             AutoImageProcessor(**kwargs)
             if name is None
@@ -200,10 +203,13 @@ class HFTransform:
             torch.Tensor: Processed tensor.
         """
         # Since only CHW images given when used in `create_pipeline`, there's extra batch dimension.
+        if self._workaround:
+            x = x * 255
         return self._p(x, return_tensors="pt").pixel_values[0]
 
     def __repr__(self):
         """Return string representation of class."""
+        # print(self._p)
         args = ", ".join(f'{k}="{v}"' for k, v in self.kwargs.items())
         return f"{self.__class__.__name__}({args})"
 

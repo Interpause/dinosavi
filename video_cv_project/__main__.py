@@ -37,6 +37,12 @@ def main(cfg: DictConfig):
 
             perf_hack()
             eval(cfg)
+        elif cfg.mode == "eval-slot":
+            from video_cv_project.eval_slot import eval
+            from video_cv_project.utils import perf_hack
+
+            perf_hack()
+            eval(cfg)
         elif cfg.mode == "help":
             log.critical("Add `--help` for help message.")
         else:

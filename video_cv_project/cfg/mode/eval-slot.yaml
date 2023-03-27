@@ -1,0 +1,22 @@
+# @package _global_
+# Config for eval mode for SlotModel.
+
+defaults:
+  - override /model: slot
+  - override /data: davis
+
+mode: eval-slot
+
+data:
+  dataset:
+    context_len: 0
+
+  transform:
+    im_transforms:
+      - _target_: video_cv_project.data.transform.HFTransform
+        name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
+        do_resize: false
+    pipeline:
+      do_rgb_norm: false
+      rgb_mean: [0.485, 0.456, 0.406]
+      rgb_std: [0.229, 0.224, 0.225]

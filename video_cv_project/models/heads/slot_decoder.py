@@ -106,6 +106,24 @@ class AlphaSlotDecoder(SlotDecoder):
         """Refer to `video_cv_project.models.heads.SlotDecoder`."""
         super(AlphaSlotDecoder, self).__init__(slot_dim, out_dim + 1, *args, **kwargs)
 
+    def get_alpha_masks(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
+        """Inference route.
+
+        Args:
+            x (torch.Tensor): BSC slots.
+            sz (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
+
+        Returns:
+            torch.Tensor: BSHW alpha masks for each slot.
+        """
+        B = len(x)
+        x = E.rearrange(x, "b s c -> (b s) c")
+        x = self.broadcast(x, sz)
+        x = self.conv(x)
+        x = E.rearrange(x, "(b s) c h w -> b c h w s", b=B)
+        alpha = F.softmax(x[:, -1], dim=-1)
+        return E.rearrange(alpha, "b h w s -> b s h w")
+
     def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Forward pass.
 

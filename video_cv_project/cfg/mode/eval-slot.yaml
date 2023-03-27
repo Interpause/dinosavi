@@ -15,7 +15,7 @@ data:
     im_transforms:
       - _target_: video_cv_project.data.transform.HFTransform
         name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
-        do_resize: false
+        do_resize: true
     pipeline:
       do_rgb_norm: false
       rgb_mean: [0.485, 0.456, 0.406]

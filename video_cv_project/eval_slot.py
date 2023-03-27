@@ -12,10 +12,47 @@ from omegaconf import DictConfig, OmegaConf
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds
-from video_cv_project.models import SlotModel
+from video_cv_project.models import SlotCPC, SlotModel
+from video_cv_project.models.heads import AlphaSlotDecoder
 from video_cv_project.utils import get_dirs, get_model_summary
 
 log = logging.getLogger(__name__)
+
+NUM_SLOTS = 16
+NUM_ITERS = 3
+
+
+def attn_weight_method(model: SlotModel, ims: torch.Tensor):
+    """Use Slot Attention weights as labels."""
+    slots = None
+    ims = E.rearrange(ims, "t c h w -> t 1 c h w")
+    weights: List[torch.Tensor] = []
+    size_hw = (0, 0)
+    for im in ims:
+        # Number of slots = number of objects + 1 for background. Less fighting.
+        # TBH maybe more slots better since the slot attention wasnt scale-trained properly.
+        # Default DAVIS palette only has 22 colors to play with...
+        slots, pats, attn = model(im, slots, num_slots=NUM_SLOTS, num_iters=NUM_ITERS)
+        weights.append(attn)
+        size_hw = pats.shape[-2:]
+    h, w = size_hw
+    preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
+    return preds
+
+
+def alpha_mask_method(model: SlotCPC, ims: torch.Tensor):
+    """Use AlphaSlotDecoder alpha masks as labels."""
+    decoder: AlphaSlotDecoder = model.decoder  # type: ignore
+    s = None
+    pats_t = model._encode(ims[None])
+    h, w = pats_t.shape[-2:]
+    slots_t = torch.stack(
+        [s := model.model.calc_slots(p, s, NUM_SLOTS, NUM_ITERS)[0] for p in pats_t]
+    )
+    preds = model.time_mlp(slots_t)
+    preds = E.rearrange(preds, "t 1 s (p c) -> p t s c", p=model.num_preds)
+    preds = decoder.get_alpha_masks(preds[0], (h, w))
+    return preds
 
 
 def eval(cfg: DictConfig):
@@ -30,11 +67,10 @@ def eval(cfg: DictConfig):
     model = instantiate(cfg.model)
     checkpointer = Checkpointer(model=model)
     checkpointer.load(root_dir / cfg.resume)
-    model: SlotModel = model.model
     # TODO: What config values to overwrite?
     old_cfg = OmegaConf.create(checkpointer.cfg)
     log.debug(f"Ckpt Config:\n{old_cfg}")
-    summary = get_model_summary(model, device=device, sizes=[(1, 3, 224, 224)])
+    summary = get_model_summary(model.model, device=device, sizes=[(1, 3, 224, 224)])
     log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
 
     log.debug("Create Eval Dataloader.")
@@ -68,26 +104,21 @@ def eval(cfg: DictConfig):
                 model.reset()  # type: ignore
 
             t_infer = time()
-            slots = None
-            ims = E.rearrange(ims, "t c h w -> t 1 c h w")
-            weights: List[torch.Tensor] = []
-            size_hw = (0, 0)
             colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
-            for im in ims:
-                # Number of slots = number of objects + 1 for background. Less fighting.
-                # TBH maybe more slots better since the slot attention wasnt scale-trained properly.
-                # Default DAVIS palette only has 22 colors to play with...
-                slots, pats, attn = model(im, slots, num_slots=16, num_iters=1)
-                weights.append(attn)
-                size_hw = pats.shape[-2:]
-            h, w = size_hw
-            preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
+            preds_a = attn_weight_method(model.model, ims)
+            preds_b = alpha_mask_method(model, ims)
+            # Interleave the two predictions for visualization.
+            preds = torch.stack([i for pair in zip(preds_a, preds_b) for i in pair])
+            im_paths = [
+                i for pair in zip(meta["im_paths"], meta["im_paths"]) for i in pair
+            ]
+
             log.debug(f"Inference: {time() - t_infer:.4f} s")
 
             t_save = time()
             dump_vos_preds(
                 save_dir,
-                meta["im_paths"],
+                im_paths,
                 preds,
                 colors,
                 has_palette=has_palette,

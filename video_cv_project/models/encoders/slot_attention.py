@@ -7,6 +7,8 @@ Some modifications were made, namely:
 - Uses `F.scaled_dot_product_attention` for more performance.
 """
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 
@@ -84,7 +86,7 @@ class SlotAttention(nn.Module):
         slots: torch.Tensor = None,
         num_slots: int = 7,
         num_iters: int = 3,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
         Args:
@@ -94,7 +96,7 @@ class SlotAttention(nn.Module):
             num_iters (int, optional): Number of iterations for slots to bind.
 
         Returns:
-            torch.Tensor: BSC slots.
+            Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
         """
         slots = self._init_slots(x, num_slots) if slots is None else slots
         x = self.norm_in(x)
@@ -103,9 +105,8 @@ class SlotAttention(nn.Module):
         # Multiple rounds of attention for slots to bind.
         for _ in range(num_iters):
             q = self.project_q(self.norm_slots(slots))
-            # TODO: Use weights to visualize slot bindings.
             attn, weights = inverted_scaled_mean_attention(q, k, v)
             slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)
             slots = slots + self.mlp(self.norm_mlp(slots))  # Residual.
 
-        return slots
+        return slots, weights

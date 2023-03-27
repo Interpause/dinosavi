@@ -126,7 +126,7 @@ class SlotModel(nn.Module):
         slots: torch.Tensor = None,
         num_slots: int = 7,
         num_iters: int = 3,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Calculate slots.
 
         Args:
@@ -136,7 +136,7 @@ class SlotModel(nn.Module):
             num_iters (int, optional): Number of iterations to run.
 
         Returns:
-            torch.Tensor: BSC slots.
+            Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
         """
         x = self._proc_feats(pats)
 
@@ -145,8 +145,10 @@ class SlotModel(nn.Module):
             slots = self.predictor(slots)
 
         # Bind slots to features.
-        slots = self.attn(x, slots=slots, num_slots=num_slots, num_iters=num_iters)
-        return slots
+        slots, weights = self.attn(
+            x, slots=slots, num_slots=num_slots, num_iters=num_iters
+        )
+        return slots, weights
 
     def forward(
         self,
@@ -154,7 +156,7 @@ class SlotModel(nn.Module):
         slots: torch.Tensor = None,
         num_slots: int = 7,
         num_iters: int = 3,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass.
 
         Args:
@@ -164,11 +166,11 @@ class SlotModel(nn.Module):
             num_iters (int, optional): Number of iterations to run.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]: BSC slots, BCHW features.
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: BSC slots, BCHW features, BSN attention weights.
         """
         pats = self._encode(im)
-        slots = self.calc_slots(pats, slots, num_slots, num_iters)
-        return slots, pats
+        slots, weights = self.calc_slots(pats, slots, num_slots, num_iters)
+        return slots, pats, weights
 
 
 class SlotCPC(nn.Module):
@@ -212,9 +214,9 @@ class SlotCPC(nn.Module):
     def _prop_slots(self, pats: torch.Tensor) -> torch.Tensor:
         """Propagate slots forward in time."""
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
-        slots = None
+        s = None
         slots_t = [
-            slots := self.model.calc_slots(p, slots, self.num_slots, self.num_iters)
+            s := self.model.calc_slots(p, s, self.num_slots, self.num_iters)[0]
             for p in pats[: len(pats) - self.time_steps]
         ]
         return torch.stack(slots_t)  # TBSC

@@ -199,6 +199,7 @@ class SlotCPC(nn.Module):
         self.decoder = decoder
         self.time_steps = time_steps
         self.num_preds = time_steps + 1  # Include t+0.
+        # TODO: Split this back up unless you can find a way to prune it. Might be used for inference after all.
         self.time_mlp = nn.Linear(model.slot_dim, self.num_preds * model.slot_dim)
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
@@ -221,11 +222,11 @@ class SlotCPC(nn.Module):
         ]
         return torch.stack(slots_t)  # TBSC
 
-    def _pred_feats(self, slots: torch.Tensor) -> torch.Tensor:
+    def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Predict future features from slots."""
         preds = self.time_mlp(slots)
         preds = E.rearrange(preds, "t b s (p c) -> (p t b) s c", p=self.num_preds)
-        return self.decoder(preds)  # (PTB)CHW
+        return self.decoder(preds, sz)  # (PTB)CHW
 
     def forward(self, vid: torch.Tensor) -> Tuple[torch.Tensor, dict]:
         """Forward pass.
@@ -241,7 +242,8 @@ class SlotCPC(nn.Module):
 
         # Predict future time steps simultaneously.
         T, P = len(slots_t), self.num_preds
-        x = self._pred_feats(slots_t)
+        h, w = pats_t.shape[-2:]
+        x = self._pred_feats(slots_t, (h, w))
         # Flatten every pixel in batch together for InfoNCE.
         x = E.rearrange(x, "(p t b) c h w -> p t (b h w) c", t=T, p=P)
         x = self.layernorm(x)  # Uniformity with ViT.

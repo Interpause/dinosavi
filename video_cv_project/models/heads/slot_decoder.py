@@ -10,7 +10,7 @@ from positional_encodings.torch_encodings import PositionalEncoding2D
 
 from .cnn import CNN
 
-__all__ = ["CrossSlotDecoder", "SlotDecoder", "AlphaSlotDecoder"]
+__all__ = ["SlotDecoder", "AlphaSlotDecoder"]
 
 
 class SpatialBroadcast(nn.Module):
@@ -20,28 +20,27 @@ class SpatialBroadcast(nn.Module):
     Encoding. Not sure what the impacts are.
     """
 
-    def __init__(self, size: Tuple[int, int], pe_dim: int = 4):
+    def __init__(self, pe_dim: int = 4):
         """Initialize Spatial Broadcast.
 
         Args:
-            size (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
             pe_dim (int, optional): Size of the positional encodings.
         """
         super(SpatialBroadcast, self).__init__()
 
         self.pe = PositionalEncoding2D(pe_dim)
-        self.size = size
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Perform spatial broadcast.
 
         Args:
             x (torch.Tensor): BC latent feature to broadcast.
+            sz (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
 
         Returns:
             torch.Tensor: BCHW broadcasted feature map.
         """
-        h, w = self.size
+        h, w = sz
         x = E.repeat(x, "b c -> b h w c", h=h, w=w)
         enc = self.pe(x)
         x = torch.cat((enc, x), dim=3)
@@ -61,7 +60,7 @@ class SlotDecoder(nn.Module):
     def __init__(
         self,
         slot_dim: int,
-        size: Tuple[int, int, int],
+        out_dim: int,
         depth: int = 3,
         kernel_size: int | Tuple[int, int] = 5,
         hid_dim: int = 256,
@@ -71,7 +70,7 @@ class SlotDecoder(nn.Module):
 
         Args:
             slot_dim (int): Size of each slot.
-            size (Tuple[int, int, int]): Size (C, H, W) of the feature map to broadcast to.
+            out_dim (int): Channel dimension of feature map to broadcast to.
             depth (int, optional): Number of layers in the decoder.
             kernel_size (int | Tuple[int, int], optional): Kernel size of the decoder.
             hid_dim (int, optional): Hidden dimension of the decoder.
@@ -79,19 +78,20 @@ class SlotDecoder(nn.Module):
         """
         super(SlotDecoder, self).__init__()
 
-        self.size = size
+        self.out_dim = out_dim
         self.kernel_size = kernel_size
 
-        self.broadcast = SpatialBroadcast(size[-2:], pe_dim)
+        self.broadcast = SpatialBroadcast(pe_dim)
 
-        dims = [slot_dim + pe_dim] + [hid_dim] * (depth - 1) + [size[0]]
+        dims = [slot_dim + pe_dim] + [hid_dim] * (depth - 1) + [out_dim]
         self.conv = CNN(dims, kernel_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Forward pass.
 
         Args:
             x (torch.Tensor): BSC slots.
+            sz (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
 
         Returns:
             torch.Tensor: BCHW decoded feature map.
@@ -102,23 +102,23 @@ class SlotDecoder(nn.Module):
 class AlphaSlotDecoder(SlotDecoder):
     """Use "alpha" channel to blend decoded slots maps together."""
 
-    def __init__(self, slot_dim, size, *args, **kwargs):
+    def __init__(self, slot_dim, out_dim, *args, **kwargs):
         """Refer to `video_cv_project.models.heads.SlotDecoder`."""
-        size = (size[0] + 1, *size[-2:])
-        super(AlphaSlotDecoder, self).__init__(slot_dim, size, *args, **kwargs)
+        super(AlphaSlotDecoder, self).__init__(slot_dim, out_dim + 1, *args, **kwargs)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Forward pass.
 
         Args:
             x (torch.Tensor): BSC slots.
+            sz (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
 
         Returns:
             torch.Tensor: BCHW decoded feature map.
         """
         B = len(x)
         x = E.rearrange(x, "b s c -> (b s) c")
-        x = self.broadcast(x)
+        x = self.broadcast(x, sz)
         x = self.conv(x)
         x = E.rearrange(x, "(b s) c h w -> b c h w s", b=B)
         # Transparencies for each slot S is the last channel.
@@ -126,28 +126,28 @@ class AlphaSlotDecoder(SlotDecoder):
         return E.reduce(x[:, :-1] * alpha, "b c h w s -> b c h w", "sum")
 
 
-class CrossSlotDecoder(SlotDecoder):
-    """Cross-Attention across Slots Spatial Broadcast Decoder."""
-
-    def __init__(self, *args, **kwargs):
-        """Refer to `video_cv_project.models.heads.SlotDecoder`."""
-        super(CrossSlotDecoder, self).__init__(*args, **kwargs)
-
-        # TODO: Cross-attention implementation.
-        # After cross-attention, should the dim be slot_dim or hid_dim or something else?
-        self.attn = nn.Identity()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass.
-
-        Args:
-            x (torch.Tensor): BSC slots.
-
-        Returns:
-            torch.Tensor: BCHW decoded feature map.
-        """
-        # BSC -> BC
-        x = self.attn(x)
-        # BC -> BCHW
-        x = self.broadcast(x)
-        return self.conv(x)
+# class CrossSlotDecoder(SlotDecoder):
+#     """Cross-Attention across Slots Spatial Broadcast Decoder."""
+#
+#     def __init__(self, *args, **kwargs):
+#         """Refer to `video_cv_project.models.heads.SlotDecoder`."""
+#         super(CrossSlotDecoder, self).__init__(*args, **kwargs)
+#
+#         # TODO: Cross-attention implementation.
+#         # After cross-attention, should the dim be slot_dim or hid_dim or something else?
+#         self.attn = nn.Identity()
+#
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         """Forward pass.
+#
+#         Args:
+#             x (torch.Tensor): BSC slots.
+#
+#         Returns:
+#             torch.Tensor: BCHW decoded feature map.
+#         """
+#         # BSC -> BC
+#         x = self.attn(x)
+#         # BC -> BCHW
+#         x = self.broadcast(x)
+#         return self.conv(x)

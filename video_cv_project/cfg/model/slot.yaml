@@ -15,8 +15,13 @@ model:
     add_pooling_layer: false
 decoder:
   _target_: video_cv_project.models.heads.AlphaSlotDecoder
-  slot_dim: 512
-  # TODO: This is auto-detectable, just no nice way to pass to decoder init.
-  size: [384, 14, 14]
+  slot_dim: ${..model.slot_dim}
+  # Should match dims of model.encoder's output feature map.
+  # TODO: Can be auto-detected or read from model.encoder metadata, just no nice
+  # way to pass to the decoder init.
+  out_dim: 384
   depth: 4
   hid_dim: 384
+  pe_type: linear
+  # Decoder handles positional encoding interpolation.
+  pe_size: [14, 14]

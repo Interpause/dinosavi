@@ -6,7 +6,8 @@ import einops as E
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from positional_encodings.torch_encodings import PositionalEncoding2D
+
+from video_cv_project.utils import gen_2d_pe, interpolate_2d_pe
 
 from .cnn import CNN
 
@@ -20,15 +21,27 @@ class SpatialBroadcast(nn.Module):
     Encoding. Not sure what the impacts are.
     """
 
-    def __init__(self, pe_dim: int = 4):
+    def __init__(
+        self,
+        pe_type: str = "linear",
+        pe_size: Tuple[int, int] = (14, 14),
+        pe_dim: int = 4,
+    ):
         """Initialize Spatial Broadcast.
 
         Args:
-            pe_dim (int, optional): Size of the positional encodings.
+            pe_type (str, optional): Type of positional encodings to use.
+            pe_size (Tuple[int, int], optional): Original positional encoding size. Ignored if `pe_type` is ``linear``.
+            pe_dim (int, optional): Size of the positional encodings. Ignored if `pe_type` is ``linear``.
         """
         super(SpatialBroadcast, self).__init__()
 
-        self.pe = PositionalEncoding2D(pe_dim)
+        # Helps to throw error if ``pe_size`` is changed after training.
+        self.register_buffer("pe", gen_2d_pe(pe_size, type=pe_type, sine_dim=pe_dim))
+
+        self.pe_type = pe_type
+        self.pe_size = pe_size
+        self.pe_dim = pe_dim
 
     def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Perform spatial broadcast.
@@ -42,15 +55,12 @@ class SpatialBroadcast(nn.Module):
         """
         h, w = sz
         x = E.repeat(x, "b c -> b h w c", h=h, w=w)
-        enc = self.pe(x)
+        # Interpolate positional encodings if needed.
+        enc: torch.Tensor = gen_2d_pe((h, w)) if self.pe_type == "linear" else self.pe  # type: ignore
+        if self.pe_type != "linear":
+            enc = interpolate_2d_pe(enc, (h, w))
+        enc = E.repeat(enc, "c h w -> b h w c", b=len(x))
         x = torch.cat((enc, x), dim=3)
-        # Official implementation uses Linear Positional Encoding.
-        # gx, gy = torch.meshgrid(
-        #     torch.linspace(-1, 1, w), torch.linspace(-1, 1, h), indexing="ij"
-        # )
-        # gx = E.repeat(gx, "h w -> b h w 1", b=len(x))
-        # gy = E.repeat(gy, "h w -> b h w 1", b=len(x))
-        # x = torch.cat((gx, gy, x), dim=3)
         return E.rearrange(x, "b h w c -> b c h w")
 
 
@@ -64,6 +74,8 @@ class SlotDecoder(nn.Module):
         depth: int = 3,
         kernel_size: int | Tuple[int, int] = 5,
         hid_dim: int = 256,
+        pe_type: str = "linear",
+        pe_size: Tuple[int, int] = (14, 14),
         pe_dim: int = 4,
     ):
         """Initialize Spatial Broadcast Slot Decoder.
@@ -74,14 +86,16 @@ class SlotDecoder(nn.Module):
             depth (int, optional): Number of layers in the decoder.
             kernel_size (int | Tuple[int, int], optional): Kernel size of the decoder.
             hid_dim (int, optional): Hidden dimension of the decoder.
-            pe_dim (int, optional): Size of the positional encodings.
+            pe_type (str, optional): Type of positional encodings to use.
+            pe_size (Tuple[int, int], optional): Original positional encoding size. Ignored if `pe_type` is ``linear``.
+            pe_dim (int, optional): Size of the positional encodings. Ignored if `pe_type` is ``linear``.
         """
         super(SlotDecoder, self).__init__()
 
         self.out_dim = out_dim
         self.kernel_size = kernel_size
 
-        self.broadcast = SpatialBroadcast(pe_dim)
+        self.broadcast = SpatialBroadcast(pe_type, tuple(pe_size), pe_dim)  # type: ignore
 
         dims = [slot_dim + pe_dim] + [hid_dim] * (depth - 1) + [out_dim]
         self.conv = CNN(dims, kernel_size)

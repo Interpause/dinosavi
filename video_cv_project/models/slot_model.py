@@ -6,12 +6,11 @@ import einops as E
 import numpy as np
 import torch
 import torch.nn as nn
-from positional_encodings.torch_encodings import PositionalEncodingPermute2D
 from transformers import ViTModel
 
 from video_cv_project.models.encoders import SlotAttention
 from video_cv_project.models.heads import SlotDecoder
-from video_cv_project.utils import infoNCE_loss, vicreg_loss
+from video_cv_project.utils import gen_2d_pe, infoNCE_loss, vicreg_loss
 
 __all__ = ["SlotModel", "SlotCPC"]
 
@@ -87,8 +86,6 @@ class SlotModel(nn.Module):
             hid_dim=slot_hid_dim,
         )
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
-
-        self.pe = PositionalEncodingPermute2D(pe_dim)
         self.pat_mlp = nn.Linear(enc_chns, feat_dim)
 
         self.pe_dim = pe_dim
@@ -109,7 +106,7 @@ class SlotModel(nn.Module):
         Typically, positional encodings are concatenated to the features.
         """
         if EXTRA_PE:
-            enc = self.pe(pats)
+            enc = gen_2d_pe(tuple(pats.shape[-2:]))
             x = torch.cat((enc, pats), dim=1)
             x = E.rearrange(x, "b c h w -> b (h w) c")
             # Run MLP after concating position encodings.

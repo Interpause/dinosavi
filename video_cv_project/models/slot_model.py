@@ -183,6 +183,7 @@ class SlotCPC(nn.Module):
         time_steps: int = 2,
         num_slots: int = 7,
         num_iters: int = 3,
+        ini_iters: int = None,
     ):
         """Initialize SlotCPC.
 
@@ -193,6 +194,7 @@ class SlotCPC(nn.Module):
             time_steps (int, optional): Up to which time step to predict to. Defaults to 2.
             num_slots (int, optional): Number of slots to create. Defaults to 7.
             num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
+            ini_iters (int, optional): Number of iterations for slots to bind when first initialized. Defaults to `num_iters`.
         """
         super(SlotCPC, self).__init__()
 
@@ -208,6 +210,7 @@ class SlotCPC(nn.Module):
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
         self.num_iters = num_iters
+        self.ini_iters = num_iters if ini_iters is None else ini_iters
 
         self.encoder_frozen = freeze_encoder
 
@@ -232,11 +235,13 @@ class SlotCPC(nn.Module):
     def _prop_slots(self, pats: torch.Tensor) -> torch.Tensor:
         """Propagate slots forward in time."""
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
-        s = None
-        slots_t = [
-            s := self.model.calc_slots(p, s, self.num_slots, self.num_iters)[0]
-            for p in pats[: len(pats) - self.time_steps]
-        ]
+        s, slots_t = None, []
+        T, i = len(pats) - self.time_steps, self.ini_iters
+        for p in pats[:T]:
+            # TODO: Might intermediate attention masks be useful for something?
+            s, _ = self.model.calc_slots(p, s, self.num_slots, i)
+            slots_t.append(s)
+            i = self.num_iters
         return torch.stack(slots_t)  # TBSC
 
     def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:

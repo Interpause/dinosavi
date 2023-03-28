@@ -103,6 +103,7 @@ def eval(cfg: DictConfig):
                 log.debug("Reset Encoder.")
                 model.reset()  # type: ignore
 
+            ims = ims.to(device)
             t_infer = time()
             colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
             preds_a = attn_weight_method(model.model, ims)
@@ -119,7 +120,7 @@ def eval(cfg: DictConfig):
             dump_vos_preds(
                 save_dir,
                 im_paths,
-                preds,
+                preds.cpu(),
                 colors,
                 has_palette=has_palette,
                 blend_name=f"blends/{vid_names[i]}/%05d.jpg",

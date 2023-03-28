@@ -77,7 +77,6 @@ class SlotModel(nn.Module):
         super(SlotModel, self).__init__()
 
         self.encoder = encoder
-        self.encoder.requires_grad_(False)  # Freeze encoder.
 
         feat_dim = encoder.config.hidden_size
         enc_chns = feat_dim + pe_dim
@@ -180,6 +179,7 @@ class SlotCPC(nn.Module):
         self,
         model: SlotModel,
         decoder: SlotDecoder,
+        freeze_encoder: bool = True,
         time_steps: int = 2,
         num_slots: int = 7,
         num_iters: int = 3,
@@ -189,6 +189,7 @@ class SlotCPC(nn.Module):
         Args:
             model (SlotModel): Slot model.
             decoder (SlotDecoder): Decodes slot to features.
+            freeze_encoder(bool, optional): Whether to freeze the encoder.
             time_steps (int, optional): Up to which time step to predict to. Defaults to 2.
             num_slots (int, optional): Number of slots to create. Defaults to 7.
             num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
@@ -201,9 +202,25 @@ class SlotCPC(nn.Module):
         self.num_preds = time_steps + 1  # Include t+0.
         # TODO: Split this back up unless you can find a way to prune it. Might be used for inference after all.
         self.time_mlp = nn.Linear(model.slot_dim, self.num_preds * model.slot_dim)
+        # self.time_mlp = nn.ModuleList(
+        #     nn.Linear(model.slot_dim, self.num_preds) for _ in range(self.num_preds)
+        # )
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
         self.num_iters = num_iters
+
+        self.encoder_frozen = freeze_encoder
+
+    @property
+    def encoder_frozen(self):
+        """`encoder_frozen` getter."""
+        return self._frozen_enc
+
+    @property.setter
+    def encoder_frozen(self, v: bool):
+        """`encoder_frozen` setter."""
+        self.model.encoder.requires_grad_(v)
+        self._frozen_enc = v
 
     def _encode(self, vid: torch.Tensor) -> torch.Tensor:
         """Encode video into feature patches."""
@@ -254,4 +271,4 @@ class SlotCPC(nn.Module):
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 
         # return infoNCE_loss(x, y)
-        return vicreg_loss(x, y)
+        return vicreg_loss(x, y, enc_frozen=self.encoder_frozen)

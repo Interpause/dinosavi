@@ -11,6 +11,7 @@ __all__ = ["CNN"]
 class CNN(nn.Module):
     """Fairly limited CNN."""
 
+    # TODO: Residual. But not sure which version of residual to use...
     def __init__(
         self,
         channels: Sequence[int],

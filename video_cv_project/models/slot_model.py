@@ -16,7 +16,7 @@ __all__ = ["SlotModel", "SlotCPC"]
 
 # TODO: Test if ViT embeddings retain positional information.
 # Might be dependent on pretraining method.
-EXTRA_PE = False
+EXTRA_PE = True
 
 
 class SlotPredictor(nn.Module):
@@ -78,7 +78,6 @@ class SlotModel(nn.Module):
         self.encoder = encoder
 
         feat_dim = encoder.config.hidden_size
-        enc_chns = feat_dim + pe_dim
 
         self.attn = SlotAttention(
             in_feats=feat_dim,
@@ -86,7 +85,7 @@ class SlotModel(nn.Module):
             hid_dim=slot_hid_dim,
         )
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
-        self.pat_mlp = nn.Linear(enc_chns, feat_dim)
+        self.pat_mlp = nn.LazyLinear(feat_dim)
 
         self.pe_dim = pe_dim
         self.slot_dim = slot_dim
@@ -199,11 +198,9 @@ class SlotCPC(nn.Module):
         self.decoder = decoder
         self.time_steps = time_steps
         self.num_preds = time_steps + 1  # Include t+0.
-        # TODO: Split this back up unless you can find a way to prune it. Might be used for inference after all.
-        self.time_mlp = nn.Linear(model.slot_dim, self.num_preds * model.slot_dim)
-        # self.time_mlp = nn.ModuleList(
-        #     nn.Linear(model.slot_dim, self.num_preds) for _ in range(self.num_preds)
-        # )
+        self.time_mlp = nn.ModuleList(
+            nn.Linear(model.slot_dim, self.num_preds) for _ in range(self.num_preds)
+        )
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
         self.num_iters = num_iters
@@ -243,8 +240,8 @@ class SlotCPC(nn.Module):
 
     def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Predict future features from slots."""
-        preds = self.time_mlp(slots)
-        preds = E.rearrange(preds, "t b s (p c) -> (p t b) s c", p=self.num_preds)
+        preds_p = [l(slots) for l in self.time_mlp]
+        preds = E.rearrange(preds_p, "p t b s c -> (p t b) s c")
         return self.decoder(preds, sz)  # (PTB)CHW
 
     def forward(self, vid: torch.Tensor) -> Tuple[torch.Tensor, dict]:

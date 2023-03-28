@@ -55,7 +55,8 @@ class SlotAttention(nn.Module):
         # Slots act as query to find representable features.
         self.project_q = nn.Linear(slot_dim, slot_dim, bias=False)
         # Input features are both the key and value.
-        self.project_kv = nn.Linear(in_feats, 2 * slot_dim, bias=False)
+        self.project_k = nn.Linear(in_feats, slot_dim, bias=False)
+        self.project_v = nn.Linear(in_feats, slot_dim, bias=False)
 
         # Slot updaters.
         self.gru = nn.GRUCell(slot_dim, slot_dim)
@@ -100,7 +101,7 @@ class SlotAttention(nn.Module):
         """
         slots = self._init_slots(x, num_slots) if slots is None else slots
         x = self.norm_in(x)
-        k, v = self.project_kv(x).split(self.slot_dim, dim=2)
+        k, v = self.project_k(x), self.project_v(x)
 
         # Multiple rounds of attention for slots to bind.
         for _ in range(num_iters):

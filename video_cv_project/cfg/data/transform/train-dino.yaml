@@ -6,8 +6,13 @@ defaults:
 
 im_transforms:
   - _target_: video_cv_project.data.transform.HFTransform
-    name: facebook/dino-vits16
+    name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/dino-vits8
+    #name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
+    #do_resize: false
+    size:
+      height: 384
+      width: 384
 
 pipeline:
-  # Normalization already done in HFViTTransform.
+  # Normalization already done in HFTransform.
   do_rgb_norm: false

@@ -3,15 +3,20 @@
 time_steps: 5
 num_slots: 7
 num_iters: 2
+ini_iters: 3
 _target_: video_cv_project.models.SlotCPC
 model:
   _target_: video_cv_project.models.SlotModel
   slot_dim: 512
   slot_hid_dim: 512
+  # Since these handle interactions between slots & predicts the next time step,
+  # each head could theoretically handle a different aspect to update. For example,
+  # changes in apperance, position, visibility, etc.
   slot_predict_heads: 4
   encoder:
     _target_: transformers.ViTModel.from_pretrained
-    pretrained_model_name_or_path: facebook/dino-vits16
+    pretrained_model_name_or_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/dino-vits8
+    #pretrained_model_name_or_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
     add_pooling_layer: false
 decoder:
   _target_: video_cv_project.models.heads.AlphaSlotDecoder

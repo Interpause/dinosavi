@@ -53,16 +53,21 @@ def confirm_ask(*args, pbar=iter_pbar, **kwargs):
     return res
 
 
-def get_model_summary(
-    model, sizes=((1, 8, 49, 3, 64, 64), (1, 8, 3, 224, 224)), device=None
-):
+SIZES = (
+    (1, 8, 49, 3, 64, 64),
+    (1, 8, 3, 224, 224),
+)
+
+
+def get_model_summary(model, sizes=SIZES, device=None):
     """Get model summary."""
     from torchinfo import summary
 
     for size in sizes:
         try:
             model_summary = summary(model, size, verbose=0, col_width=20, device=device)
-        except:
+        except Exception as e:
+            # raise e
             continue
         model_summary.formatting.layer_name_width = 30
         return model_summary

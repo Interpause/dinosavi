@@ -9,9 +9,8 @@ im_transforms:
     name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/dino-vits8
     #name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
     #do_resize: false
-    size:
-      height: 384
-      width: 384
+    # TODO: If below is list or dict, have to convert from OmegaConf to native.
+    size: 384
 
 pipeline:
   # Normalization already done in HFTransform.

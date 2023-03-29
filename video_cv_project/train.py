@@ -86,10 +86,10 @@ def train(cfg: DictConfig):
         ),
         save_every=save_every,
     )
-    trainer.tbwriter.add_graph(
-        model, torch.rand(summary.input_size[0]), use_strict_trace=False
-    )
-    trainer.tbwriter.add_hparams(tb_hparams(cfg), {})
+    # model.is_trace = True
+    # trainer.tbwriter.add_graph(model.model, torch.zeros(1, 3, 224, 224).to(device))
+    # model.is_trace = False
+    # trainer.tbwriter.add_hparams(tb_hparams(cfg), {})
 
     model.to(device).train()
 

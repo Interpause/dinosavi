@@ -41,7 +41,7 @@ class SpatialBroadcast(nn.Module):
 
         self.pe_type = pe_type
         self.pe_size = pe_size
-        self.pe_dim = pe_dim
+        self.pe_dim = 2 if pe_type == "linear" else pe_dim
 
     def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Perform spatial broadcast.
@@ -56,7 +56,7 @@ class SpatialBroadcast(nn.Module):
         h, w = sz
         x = E.repeat(x, "b c -> b h w c", h=h, w=w)
         # Interpolate positional encodings if needed.
-        enc: torch.Tensor = gen_2d_pe((h, w)) if self.pe_type == "linear" else self.pe  # type: ignore
+        enc: torch.Tensor = gen_2d_pe((h, w)).type_as(x) if self.pe_type == "linear" else self.pe  # type: ignore
         if self.pe_type != "linear":
             enc = interpolate_2d_pe(enc, (h, w))
         enc = E.repeat(enc, "c h w -> b h w c", b=len(x))
@@ -97,7 +97,7 @@ class SlotDecoder(nn.Module):
 
         self.broadcast = SpatialBroadcast(pe_type, tuple(pe_size), pe_dim)  # type: ignore
 
-        dims = [slot_dim + pe_dim] + [hid_dim] * (depth - 1) + [out_dim]
+        dims = [slot_dim + self.broadcast.pe_dim] + [hid_dim] * (depth - 1) + [out_dim]
         self.conv = CNN(dims, kernel_size)
 
     def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
@@ -130,20 +130,17 @@ class AlphaSlotDecoder(SlotDecoder):
         Returns:
             torch.Tensor: BSHW alpha masks for each slot.
         """
-        B = len(x)
-        x = E.rearrange(x, "b s c -> (b s) c")
-        x = self.broadcast(x, sz)
-        x = self.conv(x)
-        x = E.rearrange(x, "(b s) c h w -> b c h w s", b=B)
-        alpha = F.softmax(x[:, -1], dim=-1)
-        return E.rearrange(alpha, "b h w s -> b s h w")
+        return self.forward(x, sz, ret_alpha=True)
 
-    def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, sz: Tuple[int, int], ret_alpha: bool = False
+    ) -> torch.Tensor:
         """Forward pass.
 
         Args:
             x (torch.Tensor): BSC slots.
             sz (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
+            ret_alpha (bool, optional): Return BSHW alpha masks instead of features.
 
         Returns:
             torch.Tensor: BCHW decoded feature map.
@@ -155,6 +152,8 @@ class AlphaSlotDecoder(SlotDecoder):
         x = E.rearrange(x, "(b s) c h w -> b c h w s", b=B)
         # Transparencies for each slot S is the last channel.
         alpha = F.softmax(x[:, -1:], dim=-1)
+        if ret_alpha:
+            return E.rearrange(alpha, "b 1 h w s -> b s h w")
         return E.reduce(x[:, :-1] * alpha, "b c h w s -> b c h w", "sum")
 
 

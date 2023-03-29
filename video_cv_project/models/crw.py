@@ -83,6 +83,7 @@ class CRW(nn.Module):
         self.temperature = temperature
 
         self.to(device)
+        self.is_trace = False
 
     def _embed_nodes(self, x: torch.Tensor) -> torch.Tensor:
         """Embed image or image patches using encoder to get node features.
@@ -225,4 +226,6 @@ class CRW(nn.Module):
         feats = self._embed_nodes(x)
         walks = self._compute_walks(feats)
         loss, debug = self._calc_loss(walks, tgts)
+        if self.is_trace:
+            return loss  # type: ignore
         return loss, debug

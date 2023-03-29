@@ -84,7 +84,7 @@ class SlotModel(nn.Module):
             hid_dim=slot_hid_dim,
         )
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
-        self.pat_mlp = nn.LazyLinear(feat_dim)
+        self.pat_mlp = nn.Linear(feat_dim + 2, feat_dim)  # Linear pos enc so add 2.
 
         self.add_pe = add_pe
         self.slot_dim = slot_dim
@@ -101,7 +101,7 @@ class SlotModel(nn.Module):
     def _proc_feats(self, pats: torch.Tensor) -> torch.Tensor:
         """Process features."""
         if self.add_pe:
-            enc = gen_2d_pe(tuple(pats.shape[-2:]))
+            enc = gen_2d_pe(tuple(pats.shape[-2:])).type_as(pats)
             x = torch.cat((enc, pats), dim=1)
             x = E.rearrange(x, "b c h w -> b (h w) c")
             # Run MLP after concating position encodings.
@@ -195,7 +195,7 @@ class SlotCPC(nn.Module):
         self.time_steps = time_steps
         self.num_preds = time_steps + 1  # Include t+0.
         self.time_mlp = nn.ModuleList(
-            nn.Linear(model.slot_dim, self.num_preds) for _ in range(self.num_preds)
+            nn.Linear(model.slot_dim, model.slot_dim) for _ in range(self.num_preds)
         )
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
@@ -203,6 +203,7 @@ class SlotCPC(nn.Module):
         self.ini_iters = num_iters if ini_iters is None else ini_iters
 
         self.encoder_frozen = freeze_encoder
+        self.is_trace = False
 
     @property
     def encoder_frozen(self):
@@ -212,7 +213,7 @@ class SlotCPC(nn.Module):
     @encoder_frozen.setter
     def encoder_frozen(self, v: bool):
         """`encoder_frozen` setter."""
-        self.model.encoder.requires_grad_(v)
+        self.model.encoder.requires_grad_(not v)
         self._frozen_enc = v
 
     def _encode(self, vid: torch.Tensor):
@@ -269,4 +270,6 @@ class SlotCPC(nn.Module):
         # infoNCE_loss(x, y)
         loss, debug = vicreg_loss(x, y, enc_frozen=self.encoder_frozen)
         debug["slot_attn"] = tb_viz_slots(pats_t[-1, -1], attn_t[-1, -1])
+        if self.is_trace:
+            return loss  # type: ignore
         return loss, debug

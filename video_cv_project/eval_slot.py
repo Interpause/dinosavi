@@ -95,8 +95,10 @@ def eval(cfg: DictConfig):
 
     # Tensorboard Writer only used to log some visualizations.
     writer = SummaryWriter(log_dir=TENSORBOARD_DIR)
-    writer.add_graph(model, torch.rand(summary.input_size[0]), use_strict_trace=False)
-    writer.add_hparams(tb_hparams(old_cfg), {})
+    # model.is_trace = True
+    # writer.add_graph(model, torch.zeros(summary.input_size[0]).to(device))
+    # model.is_trace = False
+    # writer.add_hparams(tb_hparams(old_cfg), {})
 
     model.to(device).eval()
 

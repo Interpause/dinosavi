@@ -185,13 +185,12 @@ class CRW(nn.Module):
             Tuple[torch.Tensor, dict]: Loss and debug info.
         """
         losses = []
-        debug: dict = {"acc": 0.0}
+        debug = {"loss": 0.0, "acc": 0.0}
 
         # If no target is given, assume palindrome.
         _i = [*walks.values()][0]
         B, N, _ = _i.shape
         target = create_crw_target(B, N, _i.device) if tgts is None else tgts.flatten()
-        debug[f"N"] = N
 
         for name, path in walks.items():
             logits = E.rearrange(path, "b n m -> (b n) m")
@@ -207,8 +206,10 @@ class CRW(nn.Module):
             debug[f"loss/{name}"] = float(loss)
             debug[f"acc/{name}"] = float(logits.argmax(-1).eq(target).float().mean())
 
+        loss = torch.stack(losses).mean()
         debug["acc"] = np.mean([v for k, v in debug.items() if "acc" in k])  # type: ignore
-        return torch.stack(losses).mean(), debug
+        debug["loss"] = float(loss)
+        return loss, debug
 
     def forward(self, x: torch.Tensor, tgts: torch.Tensor = None):
         """Forward pass.

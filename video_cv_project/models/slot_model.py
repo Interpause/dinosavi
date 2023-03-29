@@ -10,7 +10,7 @@ from transformers import ViTModel
 
 from video_cv_project.models.encoders import SlotAttention
 from video_cv_project.models.heads import SlotDecoder
-from video_cv_project.utils import gen_2d_pe, infoNCE_loss, vicreg_loss
+from video_cv_project.utils import gen_2d_pe, infoNCE_loss, tb_viz_slots, vicreg_loss
 
 __all__ = ["SlotModel", "SlotCPC"]
 
@@ -209,30 +209,31 @@ class SlotCPC(nn.Module):
         """`encoder_frozen` getter."""
         return self._frozen_enc
 
-    @property.setter
+    @encoder_frozen.setter
     def encoder_frozen(self, v: bool):
         """`encoder_frozen` setter."""
         self.model.encoder.requires_grad_(v)
         self._frozen_enc = v
 
-    def _encode(self, vid: torch.Tensor) -> torch.Tensor:
+    def _encode(self, vid: torch.Tensor):
         """Encode video into feature patches."""
         B = len(vid)
         vid = E.rearrange(vid, "b t c h w -> (b t) c h w")
         pats = self.model._encode(vid)
         return E.rearrange(pats, "(b t) c h w -> t b c h w", b=B)
 
-    def _prop_slots(self, pats: torch.Tensor) -> torch.Tensor:
+    def _prop_slots(self, pats: torch.Tensor):
         """Propagate slots forward in time."""
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
-        s, slots_t = None, []
+        s, slots_t, attn_t = None, [], []
         T, i = len(pats) - self.time_steps, self.ini_iters
         for p in pats[:T]:
             # TODO: Might intermediate attention masks be useful for something?
-            s, _ = self.model.calc_slots(p, s, self.num_slots, i)
+            s, w = self.model.calc_slots(p, s, self.num_slots, i)
             slots_t.append(s)
+            attn_t.append(w)
             i = self.num_iters
-        return torch.stack(slots_t)  # TBSC
+        return torch.stack(slots_t), torch.stack(attn_t)
 
     def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Predict future features from slots."""
@@ -250,7 +251,7 @@ class SlotCPC(nn.Module):
             Tuple[torch.Tensor, dict]: Loss, metrics.
         """
         pats_t = self._encode(vid)
-        slots_t = self._prop_slots(pats_t)
+        slots_t, attn_t = self._prop_slots(pats_t)
 
         # Predict future time steps simultaneously.
         T, P = len(slots_t), self.num_preds
@@ -265,5 +266,7 @@ class SlotCPC(nn.Module):
         y = pats_t[idx]
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 
-        # return infoNCE_loss(x, y)
-        return vicreg_loss(x, y, enc_frozen=self.encoder_frozen)
+        # infoNCE_loss(x, y)
+        loss, debug = vicreg_loss(x, y, enc_frozen=self.encoder_frozen)
+        debug["slot_attn"] = tb_viz_slots(pats_t[-1, -1], attn_t[-1, -1])
+        return loss, debug

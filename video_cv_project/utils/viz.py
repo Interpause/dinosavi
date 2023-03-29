@@ -1,15 +1,17 @@
 """Visualization utilities."""
 
+from functools import partial
 from pathlib import Path
 from typing import List
 
 import einops as E
 import torch
 import torchvision.transforms.functional as F
+from omegaconf import DictConfig, OmegaConf
 from PIL import Image
 from torch.nn.functional import softmax
 
-__all__ = ["save_image", "label_to_image"]
+__all__ = ["save_image", "label_to_image", "tb_viz_slots", "tb_hparams"]
 
 
 def save_image(image: torch.Tensor, path: Path, palette: List[int] = None):
@@ -50,3 +52,34 @@ def label_to_image(
         lbl = softmax(label / blend_temp, dim=0)
         colors = colors[: len(lbl)].type_as(lbl)
         return E.einsum(lbl, colors, "n h w, n c -> c h w") / 255
+
+
+def tb_viz_slots(pats: torch.Tensor, attns: torch.Tensor):
+    """Prepare visualization of Slot Attention for tensorboard.
+
+    Args:
+        pats (torch.Tensor): CHW patches.
+        attns: (torch.Tensor): SN attention weights.
+
+    Returns:
+        tuple: Visualization info.
+    """
+    kwargs = dict(
+        mat=E.rearrange(pats.detach().cpu(), "c h w -> (h w) c"),
+        metadata=attns.detach().cpu().argmax(dim=0).tolist(),
+    )
+    return "add_embedding", kwargs
+
+
+def tb_hparams(cfg: DictConfig):
+    """Extract hyperparameters to log from the experiment config."""
+    C = partial(OmegaConf.select, cfg, default=None)
+    # This is quite hardcoded, but no choice.
+    return dict(
+        bs=C("data.batch_size"),
+        nframes=C("data.dataset.frames_per_clip"),
+        fps=C("data.dataset.frame_rate"),
+        optim=C("train.optimizer._target_"),
+        lr=C("train.optimizer.lr"),
+        sched=C("train.scheduler._target_"),
+    )

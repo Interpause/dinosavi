@@ -31,7 +31,7 @@ def eval(cfg: DictConfig):
     delete_layers(model, ["head"])
     encoder = model.encoder
     summary = get_model_summary(encoder, device=device)
-    log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
+    log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
     log.info(f"Model scale: {model.map_scale}")
 
     log.debug("Create Eval Dataloader.")

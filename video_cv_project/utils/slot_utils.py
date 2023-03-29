@@ -78,13 +78,16 @@ def infoNCE_loss(x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, dict]:
 
     # Calculate loss for each prediction (t+0, t+1, t+2, ...) separately for
     # metric logging.
-    debug = {}
+    debug = {"loss": 0.0}
     losses = []
     for i, logits in enumerate(logits_p):
         loss = F.cross_entropy(logits, labels)
         losses.append(loss)
         debug[f"loss/t+{i}"] = float(loss)
-    return torch.stack(losses).mean(), debug
+
+    loss = torch.stack(losses).mean()
+    debug["loss"] = float(loss)
+    return loss, debug
 
 
 def vicreg_loss(
@@ -124,7 +127,7 @@ def vicreg_loss(
     x = E.rearrange(x, "p t n c -> p (t n) c")
     y = E.rearrange(y, "p t n c -> p (t n) c")
 
-    debug = {}
+    debug = {"loss": 0.0}
     losses = []
     for i, (a, b) in enumerate(zip(x, y)):
         N, C = a.shape
@@ -157,4 +160,7 @@ def vicreg_loss(
 
         losses.append(loss)
         debug[f"loss/t+{i}"] = float(loss)
-    return torch.stack(losses).mean(), debug
+
+    loss = torch.stack(losses).mean()
+    debug["loss"] = float(loss)
+    return loss, debug

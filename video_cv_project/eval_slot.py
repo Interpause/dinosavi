@@ -8,18 +8,20 @@ import einops as E
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
+from torch.utils.tensorboard import SummaryWriter
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds
 from video_cv_project.models import SlotCPC, SlotModel
 from video_cv_project.models.heads import AlphaSlotDecoder
-from video_cv_project.utils import get_dirs, get_model_summary
+from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
 log = logging.getLogger(__name__)
 
 NUM_SLOTS = 16
 NUM_ITERS = 3
+TENSORBOARD_DIR = "."
 
 
 def attn_weight_method(model: SlotModel, ims: torch.Tensor):
@@ -55,6 +57,21 @@ def alpha_mask_method(model: SlotCPC, ims: torch.Tensor):
     return preds
 
 
+def tb_log_preds(
+    writer: SummaryWriter, tag: str, preds_a: torch.Tensor, preds_b: torch.Tensor
+):
+    """Log the attention & alpha masks."""
+    preds_a = E.rearrange(preds_a, "t s h w -> s t h w")
+    preds_b = E.rearrange(preds_b, "t s h w -> s t h w")
+    # Normalize to [0, 1].
+    preds_a = (preds_a - preds_a.min()) / (preds_a.max() - preds_a.min())
+    preds_b = (preds_b - preds_b.min()) / (preds_b.max() - preds_b.min())
+
+    for i, (a, b) in enumerate(zip(preds_a, preds_b)):
+        writer.add_images(f"{tag}/{i}/attn", a, dataformats="NHW")
+        writer.add_images(f"{tag}/{i}/alpha", b, dataformats="NHW")
+
+
 def eval(cfg: DictConfig):
     """Evaluate model."""
     assert cfg.resume is not None, "Must provide resume path in eval mode."
@@ -71,10 +88,15 @@ def eval(cfg: DictConfig):
     old_cfg = OmegaConf.create(checkpointer.cfg)
     log.debug(f"Ckpt Config:\n{old_cfg}")
     summary = get_model_summary(model.model, device=device, sizes=[(1, 3, 224, 224)])
-    log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
+    log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
 
     log.debug("Create Eval Dataloader.")
     dataloader = create_davis_dataloader(cfg, 16)  # Labels not used so put anything.
+
+    # Tensorboard Writer only used to log some visualizations.
+    writer = SummaryWriter(log_dir=TENSORBOARD_DIR)
+    writer.add_graph(model, torch.rand(summary.input_size[0]), use_strict_trace=False)
+    writer.add_hparams(tb_hparams(old_cfg), {})
 
     model.to(device).eval()
 
@@ -108,12 +130,12 @@ def eval(cfg: DictConfig):
             colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
             preds_a = attn_weight_method(model.model, ims)
             preds_b = alpha_mask_method(model, ims)
+            tb_log_preds(writer, f"vid{i}", preds_a, preds_b)
             # Interleave the two predictions for visualization.
             preds = torch.stack([i for pair in zip(preds_a, preds_b) for i in pair])
             im_paths = [
                 i for pair in zip(meta["im_paths"], meta["im_paths"]) for i in pair
             ]
-
             log.debug(f"Inference: {time() - t_infer:.4f} s")
 
             t_save = time()

@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import create_kinetics_dataloader
 from video_cv_project.engine import Checkpointer, Trainer
-from video_cv_project.utils import get_dirs, get_model_summary
+from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def train(cfg: DictConfig):
     log.debug("Create Model.")
     model = instantiate(cfg.model)
     summary = get_model_summary(model, device=device)
-    log.info(f"Model Summary for Input Shape {summary.input_size}:\n{summary}")
+    log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
 
     log.debug("Create Train Dataloader.")
     dataloader = create_kinetics_dataloader(cfg)
@@ -76,8 +76,6 @@ def train(cfg: DictConfig):
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
         log.debug(f"Ckpt Config:\n{old_cfg}")
 
-    model.to(device).train()
-
     trainer = Trainer(
         dataloader,
         epochs,
@@ -88,6 +86,12 @@ def train(cfg: DictConfig):
         ),
         save_every=save_every,
     )
+    trainer.tbwriter.add_graph(
+        model, torch.rand(summary.input_size[0]), use_strict_trace=False
+    )
+    trainer.tbwriter.add_hparams(tb_hparams(cfg), {})
+
+    model.to(device).train()
 
     ini_epoch = checkpointer.epoch
     log.info(f"Start training for {epochs} epochs.")
@@ -101,7 +105,7 @@ def train(cfg: DictConfig):
             target = target.to(device)
             loss, debug = model(video, target)
 
-        trainer.update(loss=float(loss), lr=float(scheduler.get_last_lr()[0]), **debug)
+        trainer.update(lr=float(scheduler.get_last_lr()[0]), **debug)
         checkpointer.epoch = ini_epoch + i
 
         optimizer.zero_grad()

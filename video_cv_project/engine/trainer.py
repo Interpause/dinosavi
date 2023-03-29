@@ -42,7 +42,7 @@ class Trainer:
         self._etask = pbar.add_task("Epoch", total=epochs, status="")
         self._itask = pbar.add_task("Iteration", total=len(dataloader), status="")
         self._stat: dict = dict(epoch=0, iteration=0)
-        self._tbwriter = SummaryWriter(log_dir=TENSORBOARD_DIR)
+        self.tbwriter = SummaryWriter(log_dir=TENSORBOARD_DIR)
 
     def __iter__(self):
         """Iterate over dataloader.
@@ -115,7 +115,7 @@ class Trainer:
         finally:
             signal.signal(signal.SIGINT, orig_handler)
             self.pbar.stop()
-            self._tbwriter.close()
+            self.tbwriter.close()
 
     def update(self, **kwargs):
         """Update training metrics & other status."""
@@ -126,11 +126,17 @@ class Trainer:
         n = self._stat["iteration"]
         step = (i - 1) * len(self.dataloader) + (n - 1)
 
-        for k, v in self._stat.items():
-            self._tbwriter.add_scalar(k, v, step)
-
         stats = []
         for k, v in self._stat.items():
+            # Workaround for special visualizations to log.
+            if type(v) == tuple and tuple(map(type, v)) == (str, dict):
+                if n % self.log_every == 0:
+                    cmd, kwargs = v
+                    func = getattr(self.tbwriter, cmd)
+                    func(tag=k, global_step=step, **kwargs)
+                continue
+
+            self.tbwriter.add_scalar(k, v, step)
             if k in {"epoch", "iteration"}:
                 continue
             # Add other formats as needed.
@@ -142,7 +148,7 @@ class Trainer:
         self.pbar.update(self._itask, status=f"{stat_str[:50]}")
 
         if n % self.log_every == 0 or n == len(self.dataloader):
-            self._tbwriter.flush()
+            self.tbwriter.flush()
             self.logger.info(
                 f"epoch: {i}/{self.epochs}, iteration: {n}/{len(self.dataloader)}, {stat_str}"
             )

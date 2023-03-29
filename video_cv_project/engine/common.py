@@ -1,14 +1,11 @@
 """Code shared by most model applications."""
 
 from functools import cache
-from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
 import einops as E
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.functional as TF
-from PIL import Image
 
 from video_cv_project.cfg import BEST_DEVICE, PENALTY
 
@@ -231,17 +228,3 @@ def propagate_labels(
         lbls[context_len + t] = pred
         preds.append(pred.cpu())
     return torch.stack(preds)
-
-
-def save_image(image: torch.Tensor, path: Path, palette: List[int] = None):
-    """Save image with optional palette.
-
-    Ensures parent directory exists before saving image.
-    """
-    path.parent.mkdir(exist_ok=True, parents=True)
-    if palette:
-        im = Image.fromarray(image.byte().numpy(), mode="P")
-        im.putpalette(palette, "RGB")
-    else:
-        im = TF.to_pil_image(image)
-    im.save(path)

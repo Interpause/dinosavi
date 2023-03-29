@@ -3,13 +3,11 @@
 from pathlib import Path
 from typing import Sequence
 
-import einops as E
 import torch
 import torchvision.transforms.functional as F
 
 from video_cv_project.data.common import images_to_tensor, load_images
-
-from .common import save_image
+from video_cv_project.utils import label_to_image, save_image
 
 __all__ = ["dump_vos_preds"]
 
@@ -42,18 +40,16 @@ def dump_vos_preds(
     pal = colors.flatten().tolist()
 
     for t, (im, lbl) in enumerate(zip(ims, lbls)):
-        # Resize labels to original size.
         # NOTE: Can squeeze extra contour accuracy by using a different interpolation method.
         lbl = F.resize(lbl, sz, antialias=True)
-
-        # Argmax to get predicted class for each pixel.
-        lbl = lbl.argmax(dim=0)
-
-        # Get colors for each class.
-        color_lbl = E.rearrange(colors[lbl], "h w c -> c h w") / 255.0
+        color_lbl = label_to_image(lbl, colors, mode="blend")
 
         # Save label.
-        save_image(lbl if has_palette else color_lbl, out_dir / f"{mask_name % t}", pal)
+        save_image(
+            lbl.argmax(dim=0) if has_palette else color_lbl,
+            out_dir / f"{mask_name % t}",
+            pal,
+        )
 
         # Save blended image for visualization.
         overlay = im * 0.5 + color_lbl * 0.5

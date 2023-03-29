@@ -26,6 +26,10 @@ def gen_2d_pe(size: Tuple[int, int], type: str = "linear", sine_dim: int = 4):
     Two types are supported: ``linear`` and ``sine``. For sinusoidal positional
     encodings, `sine_dim` can be specific for the wanted number of dims.
 
+    ``linear`` is better if the model is intended to be invariant to resolution.
+    Otherwise, ``sine`` supposedly is the better positional encoding type, though
+    whether it can be effectively interpolated is another matter.
+
     Args:
         size (Tuple[int, int]): (H, W) of the positional encodings.
         type (str, optional): Type of positional encodings.

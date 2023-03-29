@@ -14,10 +14,6 @@ from video_cv_project.utils import gen_2d_pe, infoNCE_loss, vicreg_loss
 
 __all__ = ["SlotModel", "SlotCPC"]
 
-# TODO: Test if ViT embeddings retain positional information.
-# Might be dependent on pretraining method.
-EXTRA_PE = True
-
 
 class SlotPredictor(nn.Module):
     """Propagate slots temporally.
@@ -59,16 +55,19 @@ class SlotModel(nn.Module):
     def __init__(
         self,
         encoder: ViTModel,
-        pe_dim: int = 4,
+        add_pe: bool = False,
         slot_dim: int = 512,
         slot_hid_dim: int = 768,
         slot_predict_heads: int = 4,
     ):
         """Initialize SlotModel.
 
+        `add_pe` is not necessary as `ViTModel` seems to retain positional info
+        even after several transformer layers.
+
         Args:
             encoder (ViTModel): Model used to encode frames.
-            pe_dim (int, optional): Size of positional encoding. Defaults to 4.
+            add_pe (bool, optional): Add extra positional encoding to patches.
             slot_dim (int, optional): Size of each slot. Defaults to 512.
             slot_hid_dim (int, optional): Size of hidden layer in `SlotAttention`. Defaults to 768.
             slot_predict_heads (int, optional): Number of attention heads in `SlotPredictor`. Defaults to 4.
@@ -87,7 +86,7 @@ class SlotModel(nn.Module):
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
         self.pat_mlp = nn.LazyLinear(feat_dim)
 
-        self.pe_dim = pe_dim
+        self.add_pe = add_pe
         self.slot_dim = slot_dim
         self.slot_hid_dim = slot_hid_dim
         self.feat_dim = feat_dim
@@ -100,11 +99,8 @@ class SlotModel(nn.Module):
         return E.rearrange(pats, "b (h w) c -> b c h w", h=h, w=w)
 
     def _proc_feats(self, pats: torch.Tensor) -> torch.Tensor:
-        """Process features.
-
-        Typically, positional encodings are concatenated to the features.
-        """
-        if EXTRA_PE:
+        """Process features."""
+        if self.add_pe:
             enc = gen_2d_pe(tuple(pats.shape[-2:]))
             x = torch.cat((enc, pats), dim=1)
             x = E.rearrange(x, "b c h w -> b (h w) c")

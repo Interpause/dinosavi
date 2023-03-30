@@ -36,7 +36,7 @@ def train(cfg: DictConfig):
     log.info(f"Epochs: {epochs}")
 
     log.debug("Create Model.")
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.model, _convert_="all")
     summary = get_model_summary(model, device=device)
     log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
 
@@ -47,7 +47,7 @@ def train(cfg: DictConfig):
     log.info(f"Total Steps: {cfg.total_steps}")
 
     log.debug("Create Optimizer.")
-    optimizer = instantiate(cfg.train.optimizer, model.parameters())
+    optimizer = instantiate(cfg.train.optimizer, model.parameters(), _convert_="all")
     log.info(f"Optimizer:\n{optimizer.state_dict()}")
 
     log.debug("Create Scheduler.")
@@ -55,7 +55,7 @@ def train(cfg: DictConfig):
         cfg.train.scheduler.milestones = [
             int(cfg.total_steps * m) for m in cfg.train.scheduler.milestones
         ]
-    scheduler = instantiate(cfg.train.scheduler, optimizer)
+    scheduler = instantiate(cfg.train.scheduler, optimizer, _convert_="all")
     log.info(f"Scheduler:\n{scheduler.state_dict()}")
 
     checkpointer = Checkpointer(

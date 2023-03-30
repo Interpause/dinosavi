@@ -28,19 +28,13 @@ def save_image(image: torch.Tensor, path: Path, palette: List[int] = None):
     im.save(path)
 
 
-def label_to_image(
-    label: torch.Tensor,
-    colors: torch.Tensor,
-    mode: str = "max",
-    blend_temp: float = 0.5,
-):
+def label_to_image(label: torch.Tensor, colors: torch.Tensor, mode: str = "max"):
     """Convert label to color image.
 
     Args:
         label (torch.Tensor): NHW label.
         colors (torch.Tensor): NC colors.
         mode (str, optional): How to blend multiple classes together. Defaults to "max".
-        blend_temp (float, optional): Softmax temperature when mode is ``blend``.
 
     Returns:
         torch.Tensor: CHW label as color image.
@@ -49,7 +43,8 @@ def label_to_image(
         lbl = label.argmax(dim=0)
         return E.rearrange(colors[lbl], "h w c -> c h w") / 255
     elif mode == "blend":
-        lbl = softmax(label / blend_temp, dim=0)
+        # lbl = softmax(label / blend_temp, dim=0)
+        lbl = (label - label.min()) / (label.max() - label.min())
         colors = colors[: len(lbl)].type_as(lbl)
         return E.einsum(lbl, colors, "n h w, n c -> c h w") / 255
 

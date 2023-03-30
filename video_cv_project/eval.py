@@ -27,7 +27,7 @@ def eval(cfg: DictConfig):
     log.info(f"Context Length: {context_len}")
 
     log.debug("Create Model.")
-    model: CRW = instantiate(cfg.model)
+    model: CRW = instantiate(cfg.model, _convert_="all")
     delete_layers(model, ["head"])
     encoder = model.encoder
     summary = get_model_summary(encoder, device=device)

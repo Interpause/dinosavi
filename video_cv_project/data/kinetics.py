@@ -47,12 +47,12 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
             pass
 
     transform = (
-        instantiate(cfg.data.transform.pipeline)
+        instantiate(cfg.data.transform.pipeline, _convert_="all")
         if cfg.data.transform.pipeline
         else create_train_pipeline()
     )
     patch_func = (
-        instantiate(cfg.data.transform.patch_func)
+        instantiate(cfg.data.transform.patch_func, _convert_="all")
         if cfg.data.transform.patch_func
         else None
     )
@@ -61,10 +61,12 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
 
     try:
         dataset: Kinetics = instantiate(
-            cfg.data.dataset, _precomputed_metadata=meta, download=True
+            cfg.data.dataset, _precomputed_metadata=meta, download=True, _convert_="all"
         )
     except:
-        dataset = instantiate(cfg.data.dataset, _precomputed_metadata=meta)
+        dataset = instantiate(
+            cfg.data.dataset, _precomputed_metadata=meta, _convert_="all"
+        )
 
     torch.save(dataset, cfg.data.cache_path)
     # Don't save transform into cache else loading may fail.
@@ -73,12 +75,15 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
     log.info(f"Total Videos: {dataset.video_clips.num_videos()}")
     log.info(f"Total Clips: {len(dataset)}")
 
-    sampler = instantiate(cfg.data.sampler, video_clips=dataset.video_clips)
+    sampler = instantiate(
+        cfg.data.sampler, video_clips=dataset.video_clips, _convert_="all"
+    )
 
     dataloader = instantiate(
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,
         collate_fn=collate,
+        _convert_="all",
     )
     return dataloader

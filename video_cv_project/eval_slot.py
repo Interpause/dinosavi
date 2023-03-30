@@ -19,8 +19,9 @@ from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
 log = logging.getLogger(__name__)
 
-NUM_SLOTS = 16
-NUM_ITERS = 3
+NUM_SLOTS = 8
+INI_ITERS = 3
+NUM_ITERS = 1
 TENSORBOARD_DIR = "."
 
 
@@ -30,13 +31,15 @@ def attn_weight_method(model: SlotModel, ims: torch.Tensor):
     ims = E.rearrange(ims, "t c h w -> t 1 c h w")
     weights: List[torch.Tensor] = []
     size_hw = (0, 0)
+    i = INI_ITERS
     for im in ims:
         # Number of slots = number of objects + 1 for background. Less fighting.
         # TBH maybe more slots better since the slot attention wasnt scale-trained properly.
         # Default DAVIS palette only has 22 colors to play with...
-        slots, pats, attn = model(im, slots, num_slots=NUM_SLOTS, num_iters=NUM_ITERS)
+        slots, pats, attn = model(im, slots, num_slots=NUM_SLOTS, num_iters=i)
         weights.append(attn)
         size_hw = pats.shape[-2:]
+        i = NUM_ITERS
     h, w = size_hw
     preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
     return preds
@@ -48,28 +51,26 @@ def alpha_mask_method(model: SlotCPC, ims: torch.Tensor):
     s = None
     pats_t = model._encode(ims[None])
     h, w = pats_t.shape[-2:]
-    slots_t = torch.stack(
-        [s := model.model.calc_slots(p, s, NUM_SLOTS, NUM_ITERS)[0] for p in pats_t]
-    )
-    preds = model.time_mlp(slots_t)
-    preds = E.rearrange(preds, "t 1 s (p c) -> p t s c", p=model.num_preds)
-    preds = decoder.get_alpha_masks(preds[0], (h, w))
+    slots = []
+    i = INI_ITERS
+    for p in pats_t:
+        s, _ = model.model.calc_slots(p, s, NUM_SLOTS, i)
+        slots.append(s)
+        i = NUM_ITERS
+    slots_t = torch.stack(slots)
+    preds = model.time_mlp[0](slots_t)
+    preds = E.rearrange(preds, "t 1 s c -> t s c")
+    preds = decoder.get_alpha_masks(preds, (h, w))
     return preds
 
 
-def tb_log_preds(
-    writer: SummaryWriter, tag: str, preds_a: torch.Tensor, preds_b: torch.Tensor
-):
+def tb_log_preds(writer: SummaryWriter, tag: str, preds: torch.Tensor):
     """Log the attention & alpha masks."""
-    preds_a = E.rearrange(preds_a, "t s h w -> s t h w")
-    preds_b = E.rearrange(preds_b, "t s h w -> s t h w")
+    preds = E.rearrange(preds, "t s h w -> s t h w 1")
     # Normalize to [0, 1].
-    preds_a = (preds_a - preds_a.min()) / (preds_a.max() - preds_a.min())
-    preds_b = (preds_b - preds_b.min()) / (preds_b.max() - preds_b.min())
-
-    for i, (a, b) in enumerate(zip(preds_a, preds_b)):
-        writer.add_images(f"{tag}/{i}/attn", a, dataformats="NHW")
-        writer.add_images(f"{tag}/{i}/alpha", b, dataformats="NHW")
+    preds = (preds - preds.min()) / (preds.max() - preds.min())
+    for i, p in enumerate(preds):
+        writer.add_images(f"{tag}/{i}", p, dataformats="NHWC")
 
 
 def eval(cfg: DictConfig):
@@ -81,7 +82,7 @@ def eval(cfg: DictConfig):
     log.info(f"Torch Device: {device}")
 
     log.debug("Create Model.")
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.model, _convert_="all")
     checkpointer = Checkpointer(model=model)
     checkpointer.load(root_dir / cfg.resume)
     # TODO: What config values to overwrite?
@@ -131,13 +132,16 @@ def eval(cfg: DictConfig):
             t_infer = time()
             colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
             preds_a = attn_weight_method(model.model, ims)
-            preds_b = alpha_mask_method(model, ims)
-            tb_log_preds(writer, f"vid{i}", preds_a, preds_b)
+            # preds_b = alpha_mask_method(model, ims)
+            tb_log_preds(writer, f"vid{i}-attn", preds_a)
+            # tb_log_preds(writer, f"vid{i}-alpha", preds_b)
             # Interleave the two predictions for visualization.
-            preds = torch.stack([i for pair in zip(preds_a, preds_b) for i in pair])
-            im_paths = [
-                i for pair in zip(meta["im_paths"], meta["im_paths"]) for i in pair
-            ]
+            # preds = torch.stack([i for pair in zip(preds_a, preds_b) for i in pair])
+            # im_paths = [
+            #     i for pair in zip(meta["im_paths"], meta["im_paths"]) for i in pair
+            # ]
+            im_paths = meta["im_paths"]
+            preds = preds_a
             log.debug(f"Inference: {time() - t_infer:.4f} s")
 
             t_save = time()

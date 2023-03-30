@@ -54,15 +54,18 @@ class DAVISDataset(VOSDataset):
 
 def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
     """Create dataloader for DAVIS dataset."""
-    transform = instantiate(cfg.data.transform.pipeline)
+    transform = instantiate(cfg.data.transform.pipeline, _convert_="all")
     log.info(f"Pipeline:\n{transform}")
 
-    dataset = instantiate(cfg.data.dataset, map_scale=map_scale, transform=transform)
-    sampler = instantiate(cfg.data.sampler, data_source=dataset)
+    dataset = instantiate(
+        cfg.data.dataset, map_scale=map_scale, transform=transform, _convert_="all"
+    )
+    sampler = instantiate(cfg.data.sampler, data_source=dataset, _convert_="all")
     dataloader = instantiate(
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,
         collate_fn=vos_collate,
+        _convert_="all",
     )
     return dataloader

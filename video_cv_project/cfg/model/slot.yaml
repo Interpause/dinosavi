@@ -26,8 +26,8 @@ decoder:
   # TODO: Can be auto-detected or read from model.encoder metadata, just no nice
   # way to pass to the decoder init.
   out_dim: 384
-  depth: 4
-  hid_dim: 384
+  depth: 1
+  hid_dim: 512
   pe_type: linear
   # Decoder handles positional encoding interpolation.
-  pe_size: [14, 14]
+  pe_size: [28, 28]

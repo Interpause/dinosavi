@@ -32,7 +32,7 @@ def gen_2d_pe(size: Tuple[int, int], type: str = "linear", sine_dim: int = 4):
     h, w = size
     if type == "linear":
         gx, gy = torch.meshgrid(
-            torch.linspace(-1, 1, w), torch.linspace(-1, 1, h), indexing="ij"
+            torch.linspace(-1, 1, h), torch.linspace(-1, 1, w), indexing="ij"
         )
         return torch.stack((gx, gy))
     elif type == "sine":

@@ -160,7 +160,9 @@ class PatchAndViT(nn.Module):
         super(PatchAndViT, self).__init__()
         self.name = name
         self.batch_size = batch_size
-        self.encoder: ViTModel = ViTModel.from_pretrained(name).cpu().eval()
+        self.encoder: ViTModel = (
+            ViTModel.from_pretrained(name, add_pooling_layer=False).cpu().eval()
+        )
 
     def __call__(self, ims):
         """Split TCHW images into patches and encode using ViT.
@@ -173,23 +175,29 @@ class PatchAndViT(nn.Module):
         """
         B = self.batch_size
         h, w = np.array(ims.shape[-2:]) // self.encoder.config.patch_size
+        # print(ims[0:B].shape, self.encoder.device, self.encoder.training)
         with torch.inference_mode():
-            bats = [
-                dict(
-                    self.encoder(
-                        ims[t : t + B],
-                        output_attentions=True,
-                        output_hidden_states=True,
-                        interpolate_pos_encoding=True,
-                        return_dict=True,
-                    )
+            bats = []
+            for t in range(0, len(ims), B):
+                o = self.encoder(
+                    ims[t : t + B],
+                    # output_attentions=True,  # Will OOM.
+                    # output_hidden_states=True,  # Will OOM.
+                    interpolate_pos_encoding=True,
+                    return_dict=True,
                 )
-                for t in range(0, len(ims), B)
-            ]
+
+                # attns = o.attentions[-1]  # Keep only last layer attns.
+                hiddens = o.last_hidden_state
+                del o  # Save memory.
+
+                # for hid, attn in zip(hiddens, attns):
+                #     bats.append(dict(last_hidden_state=hid, attentions=(attn,)))
+                for hid in hiddens:
+                    bats.append(dict(last_hidden_state=hid))
+
             output = BaseModelOutputWithPooling(**default_collate(bats))
             pats = output.last_hidden_state
-            # As `default_collate` adds a batch dimension on top of the existing one...
-            pats = E.rearrange(pats, "t b n c -> (t b) n c")
             pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
         return pats
 
@@ -267,7 +275,7 @@ class HFTransform:
     def __repr__(self):
         """Return string representation of class."""
         # print(self._p)
-        args = ", ".join(f'{k}="{v}"' for k, v in self.kwargs.items())
+        args = ", ".join(f"{k}={v}" for k, v in self.kwargs.items())
         return f"{self.__class__.__name__}({args})"
 
 

@@ -14,11 +14,9 @@ model:
   # each head could theoretically handle a different aspect to update. For example,
   # changes in apperance, position, visibility, etc.
   slot_predict_heads: 4
-  encoder:
-    _target_: transformers.ViTModel.from_pretrained
-    pretrained_model_name_or_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/dino-vits8
-    #pretrained_model_name_or_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
-    add_pooling_layer: false
+  enc_cfg:
+    _target_: transformers.ViTConfig.from_pretrained
+    pretrained_model_name_or_path: ${vit_path}
 decoder:
   _target_: video_cv_project.models.heads.AlphaSlotDecoder
   slot_dim: ${..model.slot_dim}
@@ -27,6 +25,7 @@ decoder:
   # way to pass to the decoder init.
   out_dim: 384
   depth: 1
+  kernel_size: [3, 3]
   hid_dim: 512
   pe_type: linear
   # Decoder handles positional encoding interpolation.

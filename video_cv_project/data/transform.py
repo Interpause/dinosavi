@@ -3,10 +3,14 @@
 from typing import Callable, List, Sequence, Tuple
 
 import einops as E
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
+from torch.utils.data import default_collate
+from transformers import AutoImageProcessor, ViTModel
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from video_cv_project.cfg import RGB_MEAN, RGB_STD
 
@@ -16,6 +20,7 @@ __all__ = [
     "MapTransform",
     "PatchSplitTransform",
     "PatchAndJitter",
+    "PatchAndViT",
     "HFTransform",
 ]
 
@@ -139,6 +144,60 @@ class PatchAndJitter(nn.Module):
         return f"{self.__class__.__name__}(size={self.size}, stride={self.stride}, scale={self.scale}, ratio={self.ratio})"
 
 
+class PatchAndViT(nn.Module):
+    """Uses HuggingFace `ViTModel` to patch and encode video."""
+
+    def __init__(self, name: str, batch_size: int = 1):
+        """Create PatchAndViT.
+
+        ``name`` is passed to `ViTModel.from_pretrained`, meaning all its tricks
+        like loading from a local file is possible.
+
+        Args:
+            name (str, optional): Name of model to load. Defaults to None.
+            batch_size (int, optional): batch size of encoder. Defaults to 1.
+        """
+        super(PatchAndViT, self).__init__()
+        self.name = name
+        self.batch_size = batch_size
+        self.encoder: ViTModel = ViTModel.from_pretrained(name).cpu().eval()
+
+    def __call__(self, ims):
+        """Split TCHW images into patches and encode using ViT.
+
+        Args:
+            ims (torch.Tensor): TCHW images.
+
+        Returns:
+            torch.Tensor: TCHW latent patches.
+        """
+        B = self.batch_size
+        h, w = np.array(ims.shape[-2:]) // self.encoder.config.patch_size
+        with torch.inference_mode():
+            bats = [
+                dict(
+                    self.encoder(
+                        ims[t : t + B],
+                        output_attentions=True,
+                        output_hidden_states=True,
+                        interpolate_pos_encoding=True,
+                        return_dict=True,
+                    )
+                )
+                for t in range(0, len(ims), B)
+            ]
+            output = BaseModelOutputWithPooling(**default_collate(bats))
+            pats = output.last_hidden_state
+            # As `default_collate` adds a batch dimension on top of the existing one...
+            pats = E.rearrange(pats, "t b n c -> (t b) n c")
+            pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
+        return pats
+
+    def __repr__(self):
+        """Return string representation of class."""
+        return f"{self.__class__.__name__}(name={self.name})"
+
+
 class _ToTensor:
     """Unlike `T.ToTensor`, does not error if input is already a tensor."""
 
@@ -178,8 +237,6 @@ class HFTransform:
         Args:
             name (str, optional): Name of model to load configuration on. Defaults to None.
         """
-        from transformers import AutoImageProcessor
-
         # For string repr.
         self.kwargs = dict(kwargs)
         self.kwargs["name"] = name

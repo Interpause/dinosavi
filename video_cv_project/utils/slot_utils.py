@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from .crw_utils import create_crw_target as create_target
 
-__all__ = ["inverted_scaled_mean_attention", "infoNCE_loss", "vicreg_loss"]
+__all__ = ["inverted_scaled_mean_attention", "infoNCE_loss", "vicreg_loss", "mse_loss"]
 
 
 def inverted_scaled_mean_attention(
@@ -158,6 +158,35 @@ def vicreg_loss(
         # TODO: Log down each individual loss.
         loss = w_inv * loss_inv + w_var * loss_var + w_cov * loss_cov
 
+        losses.append(loss)
+        debug[f"loss/t+{i}"] = float(loss)
+
+    loss = torch.stack(losses).mean()
+    debug["loss"] = float(loss)
+    return loss, debug
+
+
+def mse_loss(x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, dict]:
+    """Mean squared error loss.
+
+    Modified to accept PTNC features, where P is the predicted time step (i.e.,
+    t+0, t+1, t+2, ...), and T is the current time step (t=0, 1, 2, ...).
+
+    Args:
+        x (torch.Tensor): PTNC Predicted features.
+        y (torch.Tensor): PTNC Target features.
+
+    Returns:
+        Tuple[torch.Tensor, dict]: Loss, metrics.
+    """
+    # N is (B*H*W).
+    x = E.rearrange(x, "p t n c -> p (t n) c")
+    y = E.rearrange(y, "p t n c -> p (t n) c")
+
+    debug = {"loss": 0.0}
+    losses = []
+    for i, (a, b) in enumerate(zip(x, y)):
+        loss = F.mse_loss(a, b)
         losses.append(loss)
         debug[f"loss/t+{i}"] = float(loss)
 

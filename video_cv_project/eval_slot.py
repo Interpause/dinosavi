@@ -54,7 +54,7 @@ def alpha_mask_method(model: SlotCPC, ims: torch.Tensor):
     slots = []
     i = INI_ITERS
     for p in pats_t:
-        s, _ = model.model.calc_slots(p, s, NUM_SLOTS, i)
+        s, _ = model.model.forward(p, s, NUM_SLOTS, i)
         slots.append(s)
         i = NUM_ITERS
     slots_t = torch.stack(slots)

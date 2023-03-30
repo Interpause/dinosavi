@@ -2,6 +2,7 @@
 # Config for eval mode for SlotModel.
 
 defaults:
+  - slot-base
   - override /model: slot
   - override /data: davis
 
@@ -14,9 +15,8 @@ data:
   transform:
     im_transforms:
       - _target_: video_cv_project.data.transform.HFTransform
-        name: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
-        do_resize: true
-    pipeline:
-      do_rgb_norm: false
-      rgb_mean: [0.485, 0.456, 0.406]
-      rgb_std: [0.229, 0.224, 0.225]
+        name: ${vit_path}
+        do_resize: false
+        size:
+          height: 360
+          width: 480

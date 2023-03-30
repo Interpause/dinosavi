@@ -1,0 +1,26 @@
+# @package _global_
+# Base config for slot models. Not meant to be used directly.
+
+mode: help
+
+# vit_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
+vit_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/dino-vits8
+
+data:
+  transform:
+    im_transforms:
+      - _target_: video_cv_project.data.transform.HFTransform
+        name: ${vit_path}
+        #size: 384
+
+    pipeline:
+      # Normalization already done in HFTransform.
+      do_rgb_norm: false
+      rgb_mean: [0.485, 0.456, 0.406]
+      rgb_std: [0.229, 0.224, 0.225]
+
+    patch_func:
+      # Done on CPU, cannot use too high batch size.
+      _target_: video_cv_project.data.transform.PatchAndViT
+      name: ${vit_path}
+      batch_size: 1

@@ -3,14 +3,13 @@
 from typing import Tuple
 
 import einops as E
-import numpy as np
 import torch
 import torch.nn as nn
-from transformers import ViTModel
+from transformers import ViTConfig
 
 from video_cv_project.models.encoders import SlotAttention
 from video_cv_project.models.heads import SlotDecoder
-from video_cv_project.utils import gen_2d_pe, infoNCE_loss, tb_viz_slots, vicreg_loss
+from video_cv_project.utils import gen_2d_pe, mse_loss, tb_viz_slots
 
 __all__ = ["SlotModel", "SlotCPC"]
 
@@ -54,7 +53,7 @@ class SlotModel(nn.Module):
 
     def __init__(
         self,
-        encoder: ViTModel,
+        enc_cfg: ViTConfig,
         add_pe: bool = False,
         slot_dim: int = 512,
         slot_hid_dim: int = 768,
@@ -66,7 +65,7 @@ class SlotModel(nn.Module):
         even after several transformer layers.
 
         Args:
-            encoder (ViTModel): Model used to encode frames.
+            enc_cfg (ViTConfig): Config of ViT used to encode frames.
             add_pe (bool, optional): Add extra positional encoding to patches.
             slot_dim (int, optional): Size of each slot. Defaults to 512.
             slot_hid_dim (int, optional): Size of hidden layer in `SlotAttention`. Defaults to 768.
@@ -74,9 +73,8 @@ class SlotModel(nn.Module):
         """
         super(SlotModel, self).__init__()
 
-        self.encoder = encoder
-
-        feat_dim = encoder.config.hidden_size
+        self.enc_cfg = enc_cfg
+        feat_dim = enc_cfg.hidden_size
 
         self.attn = SlotAttention(
             in_feats=feat_dim,
@@ -91,13 +89,6 @@ class SlotModel(nn.Module):
         self.slot_hid_dim = slot_hid_dim
         self.feat_dim = feat_dim
 
-    def _encode(self, im: torch.Tensor) -> torch.Tensor:
-        """Encode image to get features for each patch."""
-        h, w = np.array(im.shape[-2:]) // self.encoder.config.patch_size
-        y = self.encoder(im, interpolate_pos_encoding=True)
-        pats = y.last_hidden_state[:, 1:]
-        return E.rearrange(pats, "b (h w) c -> b c h w", h=h, w=w)
-
     def _proc_feats(self, pats: torch.Tensor) -> torch.Tensor:
         """Process features."""
         if self.add_pe:
@@ -111,14 +102,14 @@ class SlotModel(nn.Module):
             x = E.rearrange(pats, "b c h w -> b (h w) c")
         return x
 
-    def calc_slots(
+    def forward(
         self,
         pats: torch.Tensor,
         slots: torch.Tensor = None,
         num_slots: int = 7,
         num_iters: int = 3,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Calculate slots.
+        """Forward pass.
 
         Args:
             pats (torch.Tensor): BCHW features.
@@ -141,28 +132,6 @@ class SlotModel(nn.Module):
         )
         return slots, weights
 
-    def forward(
-        self,
-        im: torch.Tensor,
-        slots: torch.Tensor = None,
-        num_slots: int = 7,
-        num_iters: int = 3,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Forward pass.
-
-        Args:
-            im (torch.Tensor): BCHW image tensor.
-            slots (torch.Tensor, optional): BSC slots.
-            num_slots (int, optional): Number of slots to create.
-            num_iters (int, optional): Number of iterations to run.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: BSC slots, BCHW features, BSN attention weights.
-        """
-        pats = self._encode(im)
-        slots, weights = self.calc_slots(pats, slots, num_slots, num_iters)
-        return slots, pats, weights
-
 
 class SlotCPC(nn.Module):
     """SlotCPC trainer."""
@@ -171,7 +140,6 @@ class SlotCPC(nn.Module):
         self,
         model: SlotModel,
         decoder: SlotDecoder,
-        freeze_encoder: bool = True,
         time_steps: int = 2,
         num_slots: int = 7,
         num_iters: int = 3,
@@ -182,7 +150,6 @@ class SlotCPC(nn.Module):
         Args:
             model (SlotModel): Slot model.
             decoder (SlotDecoder): Decodes slot to features.
-            freeze_encoder(bool, optional): Whether to freeze the encoder.
             time_steps (int, optional): Up to which time step to predict to. Defaults to 2.
             num_slots (int, optional): Number of slots to create. Defaults to 7.
             num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
@@ -202,26 +169,7 @@ class SlotCPC(nn.Module):
         self.num_iters = num_iters
         self.ini_iters = num_iters if ini_iters is None else ini_iters
 
-        self.encoder_frozen = freeze_encoder
         self.is_trace = False
-
-    @property
-    def encoder_frozen(self):
-        """`encoder_frozen` getter."""
-        return self._frozen_enc
-
-    @encoder_frozen.setter
-    def encoder_frozen(self, v: bool):
-        """`encoder_frozen` setter."""
-        self.model.encoder.requires_grad_(not v)
-        self._frozen_enc = v
-
-    def _encode(self, vid: torch.Tensor):
-        """Encode video into feature patches."""
-        B = len(vid)
-        vid = E.rearrange(vid, "b t c h w -> (b t) c h w")
-        pats = self.model._encode(vid)
-        return E.rearrange(pats, "(b t) c h w -> t b c h w", b=B)
 
     def _prop_slots(self, pats: torch.Tensor):
         """Propagate slots forward in time."""
@@ -230,7 +178,7 @@ class SlotCPC(nn.Module):
         T, i = len(pats) - self.time_steps, self.ini_iters
         for p in pats[:T]:
             # TODO: Might intermediate attention masks be useful for something?
-            s, w = self.model.calc_slots(p, s, self.num_slots, i)
+            s, w = self.model.forward(p, s, self.num_slots, i)
             slots_t.append(s)
             attn_t.append(w)
             i = self.num_iters
@@ -246,12 +194,12 @@ class SlotCPC(nn.Module):
         """Forward pass.
 
         Args:
-            vid (torch.Tensor): BTCHW image tensor.
+            vid (torch.Tensor): BTCHW image patches.
 
         Returns:
             Tuple[torch.Tensor, dict]: Loss, metrics.
         """
-        pats_t = self._encode(vid)
+        pats_t = E.rearrange(vid, "b t c h w -> t b c h w")
         slots_t, attn_t = self._prop_slots(pats_t)
 
         # Predict future time steps simultaneously.
@@ -267,8 +215,7 @@ class SlotCPC(nn.Module):
         y = pats_t[idx]
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 
-        # infoNCE_loss(x, y)
-        loss, debug = vicreg_loss(x, y, enc_frozen=self.encoder_frozen)
+        loss, debug = mse_loss(x, y)
         debug["slot_attn"] = tb_viz_slots(pats_t[-1, -1], attn_t[-1, -1])
         if self.is_trace:
             return loss  # type: ignore

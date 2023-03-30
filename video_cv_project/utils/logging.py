@@ -54,6 +54,7 @@ def confirm_ask(*args, pbar=iter_pbar, **kwargs):
 
 
 SIZES = (
+    (1, 8, 384, 28, 28),
     (1, 8, 49, 3, 64, 64),
     (1, 8, 3, 224, 224),
 )

@@ -2,10 +2,10 @@
 # Config for train mode.
 
 defaults:
+  - slot-base
   - override /data: kinetics400
-  - override /data/transform: train-dino
+  - override /data/transform: base
   - override /model: slot
-  - _self_
 
 mode: train
 

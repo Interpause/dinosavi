@@ -8,7 +8,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from .vos import VOSDataset, vos_collate
+from .vos import VOSDataset
 
 __all__ = ["DAVISDataset", "create_davis_dataloader"]
 
@@ -54,6 +54,7 @@ class DAVISDataset(VOSDataset):
 
 def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
     """Create dataloader for DAVIS dataset."""
+    assert getattr(cfg.data.dataloader, "batch_size", None) is None
     transform = instantiate(cfg.data.transform.pipeline, _convert_="all")
     log.info(f"Pipeline:\n{transform}")
 
@@ -65,7 +66,7 @@ def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
         cfg.data.dataloader,
         dataset=dataset,
         sampler=sampler,
-        collate_fn=vos_collate,
+        batch_size=None,
         _convert_="all",
     )
     return dataloader

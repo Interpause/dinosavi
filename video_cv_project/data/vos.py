@@ -7,11 +7,11 @@ from typing import Callable, Sequence, Tuple
 import torch
 import torchvision.transforms.functional as F
 from PIL import Image
-from torch.utils.data import Dataset, default_collate
+from torch.utils.data import Dataset
 
 from .common import images_to_tensor, labels_to_tensor, load_images
 
-__all__ = ["VOSDataset", "vos_collate"]
+__all__ = ["VOSDataset"]
 
 log = logging.getLogger(__name__)
 
@@ -94,10 +94,3 @@ class VOSDataset(Dataset):
     def __len__(self):
         """Dataset length."""
         return len(self.im_dirs)
-
-
-def vos_collate(batch):
-    """Exclude metadata from being batched by dataloader."""
-    metas = [b[-1] for b in batch]
-    batch = [b[:-1] for b in batch]
-    return (*default_collate(batch), metas)

@@ -5,8 +5,8 @@ defaults:
   - override transform: base
 
 mode: davis
-batch_size: 1
-num_workers: 1
+batch_size: null
+num_workers: 2
 
 dataset:
   _target_: video_cv_project.data.DAVISDataset
@@ -19,6 +19,3 @@ dataset:
 
 sampler:
   _target_: torch.utils.data.sampler.SequentialSampler
-
-dataloader:
-  batch_size: 1

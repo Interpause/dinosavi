@@ -53,10 +53,7 @@ def eval(cfg: DictConfig):
     with torch.inference_mode():
         t_data, t_infer, t_save = time(), 0.0, 0.0
         for i, (ims, lbls, colors, meta) in enumerate(dataloader):
-            B, T = ims.shape[:2]
-            assert B == 1, "Video batch size must be 1."
-
-            ims, lbls, colors, meta = ims[0], lbls[0], colors[0], meta[0]
+            T = len(ims)
 
             # Prepended frames are inferred on & contribute to run time.
             log.info(

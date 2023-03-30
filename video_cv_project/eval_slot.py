@@ -25,31 +25,26 @@ NUM_ITERS = 1
 TENSORBOARD_DIR = "."
 
 
-def attn_weight_method(model: SlotModel, ims: torch.Tensor):
+def attn_weight_method(model: SlotModel, pats_t: torch.Tensor):
     """Use Slot Attention weights as labels."""
     slots = None
-    ims = E.rearrange(ims, "t c h w -> t 1 c h w")
+    pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
     weights: List[torch.Tensor] = []
-    size_hw = (0, 0)
+    size_hw = pats_t.shape[-2:]
     i = INI_ITERS
-    for im in ims:
-        # Number of slots = number of objects + 1 for background. Less fighting.
-        # TBH maybe more slots better since the slot attention wasnt scale-trained properly.
-        # Default DAVIS palette only has 22 colors to play with...
-        slots, pats, attn = model(im, slots, num_slots=NUM_SLOTS, num_iters=i)
+    for pats in pats_t:
+        slots, attn = model.forward(pats, slots, num_slots=NUM_SLOTS, num_iters=i)
         weights.append(attn)
-        size_hw = pats.shape[-2:]
         i = NUM_ITERS
     h, w = size_hw
     preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
     return preds
 
 
-def alpha_mask_method(model: SlotCPC, ims: torch.Tensor):
+def alpha_mask_method(model: SlotCPC, pats_t: torch.Tensor):
     """Use AlphaSlotDecoder alpha masks as labels."""
     decoder: AlphaSlotDecoder = model.decoder  # type: ignore
     s = None
-    pats_t = model._encode(ims[None])
     h, w = pats_t.shape[-2:]
     slots = []
     i = INI_ITERS
@@ -88,11 +83,15 @@ def eval(cfg: DictConfig):
     # TODO: What config values to overwrite?
     old_cfg = OmegaConf.create(checkpointer.cfg)
     log.debug(f"Ckpt Config:\n{old_cfg}")
-    summary = get_model_summary(model.model, device=device, sizes=[(1, 3, 224, 224)])
+    summary = get_model_summary(model, device=device)
     log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
 
     log.debug("Create Eval Dataloader.")
     dataloader = create_davis_dataloader(cfg, 16)  # Labels not used so put anything.
+
+    log.debug("Create Encoder.")
+    encoder = instantiate(cfg.data.transform.patch_func)
+    log.info(f"Encoder:\n{encoder}")
 
     # Tensorboard Writer only used to log some visualizations.
     writer = SummaryWriter(log_dir=TENSORBOARD_DIR)
@@ -102,6 +101,7 @@ def eval(cfg: DictConfig):
     # writer.add_hparams(tb_hparams(old_cfg), {})
 
     model.to(device).eval()
+    encoder.to(device).eval()
 
     dataset: DAVISDataset = dataloader.dataset  # type: ignore
     vid_names = dataset.videos
@@ -127,9 +127,10 @@ def eval(cfg: DictConfig):
 
             ims = ims.to(device)
             t_infer = time()
+            pats_t = encoder(ims)
             colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
-            preds_a = attn_weight_method(model.model, ims)
-            # preds_b = alpha_mask_method(model, ims)
+            preds_a = attn_weight_method(model.model, pats_t)
+            # preds_b = alpha_mask_method(model, pats_t)
             tb_log_preds(writer, f"vid{i}-attn", preds_a)
             # tb_log_preds(writer, f"vid{i}-alpha", preds_b)
             # Interleave the two predictions for visualization.

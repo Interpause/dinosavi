@@ -9,7 +9,6 @@ import torch
 import torchvision.transforms.functional as F
 from omegaconf import DictConfig, OmegaConf
 from PIL import Image
-from torch.nn.functional import softmax
 
 __all__ = ["save_image", "label_to_image", "tb_viz_slots", "tb_hparams"]
 

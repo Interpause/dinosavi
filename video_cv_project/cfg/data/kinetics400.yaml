@@ -24,7 +24,5 @@ dataset:
   output_format: TCHW
 
 sampler:
-  # _target_: torchvision.datasets.samplers.RandomClipSampler
-  # max_clips_per_video: ${..clips_per_vid}
-  _target_: torchvision.datasets.samplers.UniformClipSampler
-  num_clips_per_video: ${..clips_per_vid}
+  _target_: torchvision.datasets.samplers.RandomClipSampler
+  max_clips_per_video: ${..clips_per_vid}

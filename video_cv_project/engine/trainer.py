@@ -35,9 +35,9 @@ class Trainer:
         self.epochs = epochs
         self.pbar = pbar
         self.logger = logger
-        self.log_every = log_every
+        self.log_every = log_every if log_every > 0 else float("inf")
         self.save_func = save_func
-        self.save_every = save_every
+        self.save_every = save_every if save_every > 0 else float("inf")
 
         self._etask = pbar.add_task("Epoch", total=epochs, status="")
         self._itask = pbar.add_task("Iteration", total=len(dataloader), status="")

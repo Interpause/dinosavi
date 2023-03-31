@@ -43,6 +43,12 @@ def main(cfg: DictConfig):
 
             perf_hack()
             eval(cfg)
+        elif cfg.mode == "cache":
+            from video_cv_project.cache import cache
+            from video_cv_project.utils import perf_hack
+
+            perf_hack()
+            cache(cfg)
         elif cfg.mode == "help":
             log.critical("Add `--help` for help message.")
         else:

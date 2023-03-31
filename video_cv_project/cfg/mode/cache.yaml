@@ -5,43 +5,40 @@ defaults:
   - slot-base
   - override /data: kinetics400
   - override /data/transform: base
-  - override /model: slot
+  - override /model: none
 
-mode: train
+mode: cache
 
-device: cpu
+model:
+  _target_: video_cv_project.data.transform.PatchAndViT
+  name: ${vit_path}
+  # 512 + 256 + 128. Highest "nice" batch size for 48GB of VRAM.
+  batch_size: 896
+  compile: true
+  cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
 
 train:
   epochs: 1
+  log_every: 20
+  save_every: -1
 
-  log_every: 999999999
-  save_every: 999999999
-
-  dryrun: true
-
-  # TODO: Optimizer/scheduler can be its own sub-config.
-  optimizer:
-    _target_: torch.optim.Adam
-    lr: 0.0001
-
-  scheduler:
-    _target_: torch.optim.lr_scheduler.OneCycleLR
-    max_lr: ${..optimizer.lr}
-    total_steps: ${total_steps}
-    pct_start: 0.1
+sampler:
+  _target_: torchvision.datasets.samplers.UniformClipSampler
+  # Kinetics400 videos are ~10s each. At 8 fps, each video has ~80 frames.
+  num_clips_per_video: 80
 
 data:
-  # cache_path: /home/jovyan/downloads/kinetics400-train.pt
-  batch_size: 16
-  num_workers: 16
-  clips_per_vid: 40
+  cache_path: /home/jovyan/downloads/kinetics400-train.pt
+  batch_size: ${..model.batch_size}
+  num_workers: 32
   dataset:
+    # Ensure every frame is cached.
     frames_per_clip: 1
     step_between_clips: 1
-    # split: train
+    split: train
 
   transform:
-    patch_func:
-      # Done on CPU, cannot use too high batch size.
-      device: cuda
-      batch_size: 1
+    patch_func: null
+
+  # Workaround for config merge.
+  sampler: ${sampler}

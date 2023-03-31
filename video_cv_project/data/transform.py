@@ -1,5 +1,6 @@
 """Data transforms."""
 
+from multiprocessing import parent_process
 from typing import Callable, List, Sequence, Tuple
 
 import einops as E
@@ -147,24 +148,71 @@ class PatchAndJitter(nn.Module):
 class PatchAndViT(nn.Module):
     """Uses HuggingFace `ViTModel` to patch and encode video."""
 
-    def __init__(self, name: str, batch_size: int = 1):
+    def __init__(
+        self,
+        name: str,
+        batch_size: int = 1,
+        compile: bool = False,
+        device: torch.device = None,
+    ):
         """Create PatchAndViT.
 
         ``name`` is passed to `ViTModel.from_pretrained`, meaning all its tricks
         like loading from a local file is possible.
 
+        Note, if using ``compile``, the input size to the encoder should be the
+        original input size of the `ViTModel` as specified by `ViTConfig` (i.e.,
+        224x224). Interpolation may fail to compile.
+
+        Note, a ``batch_size`` other than 1 might result in additional compiles
+        if the last batch happens to be smaller.
+
         Args:
             name (str, optional): Name of model to load. Defaults to None.
             batch_size (int, optional): batch size of encoder. Defaults to 1.
+            compile (bool, optional): Whether to use `torch.compile`. Defaults to False.
+            device (torch.device, optional): Device to use. Defaults to "cpu".
         """
         super(PatchAndViT, self).__init__()
         self.name = name
         self.batch_size = batch_size
-        self.encoder: ViTModel = (
-            ViTModel.from_pretrained(name, add_pooling_layer=False).cpu().eval()
-        )
+        self.compile = compile
+        self._compiled = False
+        self.device = torch.device("cpu" if device is None else device)
 
-    def __call__(self, ims):
+        enc: ViTModel = ViTModel.from_pretrained(
+            name, add_pooling_layer=False, torchscript=compile
+        )
+        self.enc = enc.to(device).eval().requires_grad_(False)
+        self._cfg = self.enc.config
+
+        self._cfg.return_dict = False
+        # Both below can OOM if not careful.
+        # self._cfg.output_attentions = True
+        # self._cfg.output_hidden_states = True
+
+    def _compile(self):
+        """Cannot compile first when using multiprocessing. Must compile after fork."""
+        if not self.compile or self._compiled:
+            return
+        if parent_process() is not None:
+            self._compiled = "jit"
+            # Compile doesn't work inside a daemonic child process.
+            # See: https://github.com/pytorch/pytorch/issues/97992
+            B, C, S = self.batch_size, self._cfg.num_channels, self._cfg.image_size
+            x = torch.rand(B, C, S, S).to(self.device)
+            with torch.no_grad():
+                traced = torch.jit.trace(self.enc, x)
+            self.enc = torch.jit.optimize_for_inference(traced)
+        else:
+            self._compiled = "dynamo"
+            # `dynamic` doesn't work for ViTModel.
+            # Positional encoding interpolation cannot compile either.
+            self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")  # type: ignore
+            self.enc.eval()  # Compile resets eval for some reason.
+
+    @torch.no_grad()
+    def __call__(self, ims: torch.Tensor) -> torch.Tensor:
         """Split TCHW images into patches and encode using ViT.
 
         Args:
@@ -173,37 +221,46 @@ class PatchAndViT(nn.Module):
         Returns:
             torch.Tensor: TCHW latent patches.
         """
+        self._compile()
+        ori_device = ims.device
+        ims = ims.to(self.device)
+
         B = self.batch_size
-        h, w = np.array(ims.shape[-2:]) // self.encoder.config.patch_size
+        h, w = np.array(ims.shape[-2:]) // self._cfg.patch_size
         # print(ims[0:B].shape, self.encoder.device, self.encoder.training)
-        with torch.inference_mode():
-            bats = []
-            for t in range(0, len(ims), B):
-                o = self.encoder(
-                    ims[t : t + B],
-                    # output_attentions=True,  # Will OOM.
-                    # output_hidden_states=True,  # Will OOM.
-                    interpolate_pos_encoding=True,
-                    return_dict=True,
+
+        bats = []
+        for t in range(0, len(ims), B):
+            im = ims[t : t + B]
+            # Disable inference mode as compile requires grad version counter.
+            with torch.inference_mode(mode=self._compiled != "dynamo"):
+                # Tuple of last_hidden_state, pooler_output, hidden_states, attentions.
+                # All except last_hidden_state is optional, so the tuple might have
+                # varying length depending on ViTConfig.
+                o = (
+                    # Interpolation completely unsupported for `torch.jit`.
+                    self.enc(im)
+                    if self._compiled == "jit"
+                    else self.enc(im, interpolate_pos_encoding=True)
                 )
 
-                # attns = o.attentions[-1]  # Keep only last layer attns.
-                hiddens = o.last_hidden_state
-                del o  # Save memory.
+            hiddens = o[0]
+            # attns = o[-1][-1]  # Keep only last layer attns.
+            del o  # Save memory.
 
-                # for hid, attn in zip(hiddens, attns):
-                #     bats.append(dict(last_hidden_state=hid, attentions=(attn,)))
-                for hid in hiddens:
-                    bats.append(dict(last_hidden_state=hid))
+            # for hid, attn in zip(hiddens, attns):
+            #     bats.append(dict(last_hidden_state=hid, attentions=(attn,)))
+            for hid in hiddens:
+                bats.append(dict(last_hidden_state=hid))
 
-            output = BaseModelOutputWithPooling(**default_collate(bats))
-            pats = output.last_hidden_state
-            pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
-        return pats
+        output = BaseModelOutputWithPooling(**default_collate(bats))
+        pats = output.last_hidden_state
+        pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
+        return pats.to(ori_device)
 
     def __repr__(self):
         """Return string representation of class."""
-        return f"{self.__class__.__name__}(name={self.name})"
+        return f"{self.__class__.__name__}(name={self.name}, compile={self.compile}, device={self.device})"
 
 
 class _ToTensor:

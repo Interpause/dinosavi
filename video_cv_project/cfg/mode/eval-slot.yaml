@@ -20,8 +20,3 @@ data:
         size:
           height: 360
           width: 480
-
-    patch_func:
-      # ViT encoding done on GPU during eval, can use higher batch size.
-      # Unless `do_resize` above is false.
-      batch_size: 1

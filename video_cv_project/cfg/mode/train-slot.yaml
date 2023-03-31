@@ -37,3 +37,9 @@ data:
 
   sampler:
     max_clips_per_video: 100
+
+  transform:
+    patch_func:
+      # Done on CPU, cannot use too high batch size.
+      device: cpu
+      batch_size: 2

@@ -101,7 +101,6 @@ def eval(cfg: DictConfig):
     # writer.add_hparams(tb_hparams(old_cfg), {})
 
     model.to(device).eval()
-    encoder.to(device).eval()
 
     dataset: DAVISDataset = dataloader.dataset  # type: ignore
     vid_names = dataset.videos
@@ -119,11 +118,6 @@ def eval(cfg: DictConfig):
             log.debug(f"Data: {time() - t_data:.4f} s")
 
             save_dir = out_dir / "results"
-
-            # Reset hidden state of encoder (if present).
-            if hasattr(model, "reset"):
-                log.debug("Reset Encoder.")
-                model.reset()  # type: ignore
 
             ims = ims.to(device)
             t_infer = time()

@@ -83,7 +83,10 @@ def override_forward(
     setattr(model, "forward", bound_method)
 
 
-def infer_outdim(model: nn.Module, indim: Sequence[int], device=BEST_DEVICE):
+@torch.inference_mode()
+def infer_outdim(
+    model: nn.Module, indim: Sequence[int], device=BEST_DEVICE
+) -> torch.Size:
     """Infer output dimension of model.
 
     Args:
@@ -96,8 +99,4 @@ def infer_outdim(model: nn.Module, indim: Sequence[int], device=BEST_DEVICE):
     """
     x = torch.zeros(indim).to(device)
     model.to(device).eval()
-
-    with torch.inference_mode():
-        y: torch.Tensor = model(x)
-
-    return y.shape
+    return model(x).shape

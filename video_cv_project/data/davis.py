@@ -8,6 +8,8 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
+from video_cv_project.utils import seed_data
+
 from .vos import VOSDataset
 
 __all__ = ["DAVISDataset", "create_davis_dataloader"]
@@ -68,5 +70,6 @@ def create_davis_dataloader(cfg: DictConfig, map_scale: int) -> DataLoader:
         sampler=sampler,
         batch_size=None,
         _convert_="all",
+        **seed_data(),
     )
     return dataloader

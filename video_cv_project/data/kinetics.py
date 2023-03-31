@@ -9,6 +9,8 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader, default_collate
 from torchvision.datasets import Kinetics
 
+from video_cv_project.utils import seed_data
+
 from .transform import create_train_pipeline
 
 __all__ = ["create_kinetics_dataloader"]
@@ -85,5 +87,6 @@ def create_kinetics_dataloader(cfg: DictConfig) -> DataLoader:
         sampler=sampler,
         collate_fn=collate,
         _convert_="all",
+        **seed_data(),
     )
     return dataloader

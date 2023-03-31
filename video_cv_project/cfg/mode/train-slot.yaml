@@ -30,13 +30,11 @@ data:
   # cache_path: /home/jovyan/downloads/kinetics400-train.pt
   batch_size: 12
   num_workers: 12
+  clips_per_vid: 2
   dataset:
     frames_per_clip: 32
     step_between_clips: 24
     # split: train
-
-  sampler:
-    max_clips_per_video: 100
 
   transform:
     patch_func:

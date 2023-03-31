@@ -38,10 +38,6 @@ def train(cfg: DictConfig):
 
     if dryrun:
         log.warning("Dry run mode! Model will be not used.")
-        patch_func = cfg.data.transform.patch_func
-        if patch_func is not None and "device" in patch_func:
-            with open_dict(cfg):
-                cfg.data.transform.patch_func.device = str(device)
 
     log.debug("Create Model.")
     model = instantiate(cfg.model, _convert_="all")
@@ -99,7 +95,7 @@ def train(cfg: DictConfig):
     # model.is_trace = False
     # trainer.tbwriter.add_hparams(tb_hparams(cfg), {})
 
-    model.to("cpu" if dryrun else device).train()
+    model.to(device).train()
 
     ini_epoch = checkpointer.epoch
     log.info(f"Start training for {epochs} epochs.")

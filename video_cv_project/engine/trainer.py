@@ -74,12 +74,12 @@ class Trainer:
         signal.signal(signal.SIGINT, set_interrupted)
 
         try:
-            self.pbar.start()
             for i in range(1, self.epochs + 1):
                 self.pbar.reset(self._itask)
                 data_t, infer_t = 0.0, 0.0
                 t_data, t_infer = time(), 0.0
                 for n, data in enumerate(self.dataloader, start=1):
+                    self.pbar.start()
                     data_t = time() - t_data
 
                     t_infer = time()

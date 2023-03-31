@@ -216,6 +216,28 @@ class PatchAndViT(nn.Module):
         buf.seek(0)
         self._cache.set(key, buf, read=True, tag=self.name)
 
+    def _get_vid_cache(
+        self, vid: torch.Tensor
+    ) -> Tuple[List[str], torch.Tensor | None]:
+        """Cache video on frame-level."""
+        keys, vals = [], []
+        missing = False
+        for im in vid:
+            k, v = self._get_cache(im)
+            if v is None:
+                missing = True
+            keys.append(k if v is None else None)
+            vals.append(v)
+        return keys, None if missing else torch.stack(vals)  # type: ignore
+
+    def _put_vid_cache(self, keys: List[str], vid: torch.Tensor):
+        """Cache video on frame-level."""
+        for k, im in zip(keys, vid):
+            # If key is None, it is already in cache.
+            if k is None:
+                continue
+            self._put_cache(k, im)
+
     def _compile(self):
         """Cannot compile first when using multiprocessing. Must compile after fork."""
         if not self.compile or self._compiled:
@@ -247,7 +269,7 @@ class PatchAndViT(nn.Module):
             torch.Tensor: TCHW latent patches.
         """
         ori_device = ims.device
-        key, val = self._get_cache(ims)
+        key, val = self._get_vid_cache(ims)
         if val is not None:
             return val.to(ori_device)
 
@@ -285,7 +307,8 @@ class PatchAndViT(nn.Module):
         output = BaseModelOutputWithPooling(**default_collate(bats))
         pats = output.last_hidden_state
         pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
-        self._put_cache(key, pats)
+
+        self._put_vid_cache(key, pats)
         return pats.to(ori_device)
 
     def __repr__(self):

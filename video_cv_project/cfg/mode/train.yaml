@@ -9,8 +9,10 @@ mode: train
 train:
   epochs: 1
 
-  log_every: 20
-  save_every: 500
+  log_every: 50
+  save_every: 1000
+
+  dryrun: false
 
   # TODO: Optimizer/scheduler can be its own sub-config.
   optimizer:

@@ -1,6 +1,7 @@
 """Data transforms."""
 
-from multiprocessing import parent_process
+from io import BytesIO
+from multiprocessing import current_process, parent_process
 from typing import Callable, List, Sequence, Tuple
 
 import einops as E
@@ -9,11 +10,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
+from diskcache import Cache
 from torch.utils.data import default_collate
 from transformers import AutoImageProcessor, ViTModel
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from video_cv_project.cfg import RGB_MEAN, RGB_STD
+from video_cv_project.utils import hash_tensor
 
 __all__ = [
     "create_train_pipeline",
@@ -153,6 +156,7 @@ class PatchAndViT(nn.Module):
         name: str,
         batch_size: int = 1,
         compile: bool = False,
+        cache_dir: str = None,
         device: torch.device = None,
     ):
         """Create PatchAndViT.
@@ -171,6 +175,7 @@ class PatchAndViT(nn.Module):
             name (str, optional): Name of model to load. Defaults to None.
             batch_size (int, optional): batch size of encoder. Defaults to 1.
             compile (bool, optional): Whether to use `torch.compile`. Defaults to False.
+            cache_dir (str, optional): Path to cache folder.
             device (torch.device, optional): Device to use. Defaults to "cpu".
         """
         super(PatchAndViT, self).__init__()
@@ -178,6 +183,8 @@ class PatchAndViT(nn.Module):
         self.batch_size = batch_size
         self.compile = compile
         self._compiled = False
+        self.cache_dir = cache_dir
+        self._cache = Cache(cache_dir)
         self.device = torch.device("cpu" if device is None else device)
 
         enc: ViTModel = ViTModel.from_pretrained(
@@ -190,6 +197,24 @@ class PatchAndViT(nn.Module):
         # Both below can OOM if not careful.
         # self._cfg.output_attentions = True
         # self._cfg.output_hidden_states = True
+
+    def _get_cache(self, x: torch.Tensor) -> Tuple[str, torch.Tensor | None]:
+        """Returns value from cache if already computed."""
+        k = f"{self.name}/{hash_tensor(x)}"
+        v = self._cache.get(k, default=None, read=True)
+        if v is not None:
+            # print(f"{current_process().name} LOAD: {k}")
+            v = torch.load(v, weights_only=True, map_location="cpu")
+        return k, v
+
+    def _put_cache(self, key: str, x: torch.Tensor):
+        """Put value into cache."""
+        # print(f"{current_process().name} SAVE: {key}")
+        buf = BytesIO()
+        x = x.detach().cpu().requires_grad_(False)
+        torch.save(x, buf)
+        buf.seek(0)
+        self._cache.set(key, buf, read=True, tag=self.name)
 
     def _compile(self):
         """Cannot compile first when using multiprocessing. Must compile after fork."""
@@ -221,8 +246,12 @@ class PatchAndViT(nn.Module):
         Returns:
             torch.Tensor: TCHW latent patches.
         """
-        self._compile()
         ori_device = ims.device
+        key, val = self._get_cache(ims)
+        if val is not None:
+            return val.to(ori_device)
+
+        self._compile()
         ims = ims.to(self.device)
 
         B = self.batch_size
@@ -256,11 +285,12 @@ class PatchAndViT(nn.Module):
         output = BaseModelOutputWithPooling(**default_collate(bats))
         pats = output.last_hidden_state
         pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
+        self._put_cache(key, pats)
         return pats.to(ori_device)
 
     def __repr__(self):
         """Return string representation of class."""
-        return f"{self.__class__.__name__}(name={self.name}, compile={self.compile}, device={self.device})"
+        return f"{self.__class__.__name__}(name={self.name}, compile={self.compile}, cache_dir={self.cache_dir}, device={self.device})"
 
 
 class _ToTensor:

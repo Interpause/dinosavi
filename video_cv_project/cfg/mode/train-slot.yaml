@@ -15,6 +15,8 @@ train:
   log_every: 50
   save_every: 1000
 
+  dryrun: false
+
   # TODO: Optimizer/scheduler can be its own sub-config.
   optimizer:
     _target_: torch.optim.Adam

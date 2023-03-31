@@ -569,6 +569,18 @@ files = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.4.0"
+description = "Disk Cache -- Disk and file backed persistent cache."
+category = "main"
+optional = false
+python-versions = ">=3"
+files = [
+    {file = "diskcache-5.4.0-py3-none-any.whl", hash = "sha256:af3ec6d7f167bbef7b6c33d9ee22f86d3e8f2dd7131eb7c4703d8d91ccdc0cc4"},
+    {file = "diskcache-5.4.0.tar.gz", hash = "sha256:8879eb8c9b4a2509a5e633d2008634fb2b0b35c2b36192d89655dbde02419644"},
+]
+
+[[package]]
 name = "einops"
 version = "0.6.0"
 description = "A new flavour of deep learning operations"
@@ -3016,4 +3028,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "3b7b6df92faed6a1bf712ffd324c638af8b874432c33a6f387737e55112ffe06"
+content-hash = "b8c3f23b3d1c9c90bf055d0477edfdbff1807fdc939a9bf717022684d9116c22"

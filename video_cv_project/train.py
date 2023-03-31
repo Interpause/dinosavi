@@ -31,9 +31,17 @@ def train(cfg: DictConfig):
     epochs = cfg.train.epochs
     log_every = cfg.train.log_every
     save_every = cfg.train.save_every
+    dryrun = cfg.train.dryrun
 
     log.info(f"Torch Device: {device}")
     log.info(f"Epochs: {epochs}")
+
+    if dryrun:
+        log.warning("Dry run mode! Model will be not used.")
+        patch_func = cfg.data.transform.patch_func
+        if patch_func is not None and "device" in patch_func:
+            with open_dict(cfg):
+                cfg.data.transform.patch_func.device = str(device)
 
     log.debug("Create Model.")
     model = instantiate(cfg.model, _convert_="all")
@@ -91,11 +99,14 @@ def train(cfg: DictConfig):
     # model.is_trace = False
     # trainer.tbwriter.add_hparams(tb_hparams(cfg), {})
 
-    model.to(device).train()
+    model.to("cpu" if dryrun else device).train()
 
     ini_epoch = checkpointer.epoch
     log.info(f"Start training for {epochs} epochs.")
     for i, n, data in trainer:
+        if dryrun:
+            continue
+
         video, target = data if isinstance(data, tuple) else (data, None)
         video = video.to(device)
 

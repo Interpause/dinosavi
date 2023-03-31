@@ -24,4 +24,5 @@ data:
       name: ${vit_path}
       batch_size: 2
       compile: true
+      cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
       device: ${device}

@@ -4,8 +4,9 @@ import random
 
 import numpy as np
 import torch
+from xxhash import xxh3_64_hexdigest as hexdigest
 
-__all__ = ["perf_hack", "seed_rand", "seed_data"]
+__all__ = ["perf_hack", "seed_rand", "seed_data", "hash_tensor"]
 
 
 def seed_rand(seed: int = 42):
@@ -45,3 +46,22 @@ def perf_hack(deterministic=False):
 
     # Fix for running out of File Descriptors.
     torch.multiprocessing.set_sharing_strategy("file_system")
+
+
+def hash_tensor(x: torch.Tensor) -> str:
+    """Returns deterministic hexdigest of tensor."""
+    # Ops used here are to minimize copies.
+    is_float = torch.is_floating_point(x)
+    # Prevent inplace modification of `x` when on "cpu".
+    if is_float and x.get_device() < 0:
+        x = x.clone(memory_format=torch.contiguous_format)
+    # Using `x.numpy(force=True).data` is faster than `bytes(x.flatten().byte())`.
+    x: np.ndarray = x.numpy(force=True)
+    # At risk of collision, decrease precision due to floating point error.
+    if is_float:
+        x -= x.min()
+        x *= 255 / (x.max() - x.min())
+        x = np.asarray(x, np.uint8, order="C")
+    # Standardize to contiguous array for deterministic hash.
+    x = np.asarray(x, order="C")
+    return hexdigest(x.data, seed=0)

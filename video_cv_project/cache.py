@@ -58,7 +58,8 @@ def cache(cfg: DictConfig):
     queue: Dict[str, torch.Tensor] = {}
     with torch.inference_mode():
         for i, n, video in trainer:
-            queue.update(video)
+            for v in video:
+                queue.update(v)
 
             while len(queue) >= batch_size:
                 hashes, ims = [], []

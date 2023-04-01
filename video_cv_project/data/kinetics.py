@@ -22,10 +22,14 @@ def collate(batch):
     """`torchvision.datasets.video_utils.VideoClips` returns metadata along with video tensor. Select video tensor & stack into batch."""
     # Special treatment when not batched (used in cache mode).
     if not isinstance(batch, list):
-        return batch[0]
+        return [batch[0]]
 
     # See https://github.com/pytorch/vision/blob/707457050620e1f70ab1b187dad81cc36a7f9180/torchvision/datasets/video_utils.py#L289.
     batch = [c[0] for c in batch]
+
+    # Special treatment for batched cache mode.
+    if isinstance(batch[0], dict):
+        return batch
     # `default_collate` searches for and stacks tensors while preserving data structure.
     return default_collate(batch)
 

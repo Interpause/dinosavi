@@ -40,7 +40,7 @@ def perf_hack(deterministic=False):
     torch.backends.cudnn.benchmark = not deterministic
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    torch.use_deterministic_algorithms(deterministic)
+    torch.use_deterministic_algorithms(deterministic, warn_only=True)
 
     # Seed random here, why not?
     seed_rand()

@@ -21,9 +21,8 @@ compile: true
 epochs: 1
 log_every: -1
 
-# 512 + 256 + 128. Highest "nice" batch size for 48GB of VRAM.
-# 512 is the highest "nice" number tested that doesn't run into an unknown CUDA error.
 batch_size: 512
+num_writers: 32
 
 sampler:
   _target_: torchvision.datasets.samplers.UniformClipSampler

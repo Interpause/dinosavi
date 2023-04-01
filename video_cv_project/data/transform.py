@@ -177,7 +177,7 @@ class PatchAndViT(nn.Module):
         Args:
             name (str, optional): Name of model to load. Defaults to None.
             batch_size (int, optional): batch size of encoder. Defaults to 1.
-            compile (bool, optional): Whether to use `torch.compile`. Defaults to False.
+            compile (bool, optional): Whether to use torchscript. Defaults to False.
             cache_dir (str, optional): Path to cache folder.
             device (torch.device, optional): Device to use. Defaults to "cpu".
         """
@@ -207,21 +207,23 @@ class PatchAndViT(nn.Module):
         """Cannot compile first when using multiprocessing. Must compile after fork."""
         if not self.compile or self.compile_mode is not None:
             return
-        elif parent_process() is not None:
+        # elif parent_process() is not None:
+        else:
             self.compile_mode = "jit"
             # Compile doesn't work inside a daemonic child process.
             # See: https://github.com/pytorch/pytorch/issues/97992
             B, C, S = self.batch_size, self.cfg.num_channels, self.cfg.image_size
-            x = torch.rand(B, C, S, S).to(self.device)
             with torch.no_grad():
+                x = torch.rand(B, C, S, S).to(self.device)
                 traced = torch.jit.trace(self.enc, x)
-            self.enc = torch.jit.optimize_for_inference(traced)
-        else:
-            self.compile_mode = "dynamo"
-            # `dynamic` doesn't work for ViTModel.
-            # Positional encoding interpolation cannot compile either.
-            self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")  # type: ignore
-            self.enc.eval()  # Compile resets eval for some reason.
+                self.enc = torch.jit.optimize_for_inference(traced)
+        # NOTE: `torch.compile` fails equality!
+        # else:
+        #     self.compile_mode = "dynamo"
+        #     # `dynamic` doesn't work for ViTModel.
+        #     # Positional encoding interpolation cannot compile either.
+        #     self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")  # type: ignore
+        #     self.enc.eval()  # Compile resets eval for some reason.
 
     def _get_vid_cache(
         self, vid: torch.Tensor

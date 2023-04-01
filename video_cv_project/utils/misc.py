@@ -4,9 +4,10 @@ import random
 
 import numpy as np
 import torch
+import torch.nn as nn
 from xxhash import xxh3_64_hexdigest as hexdigest
 
-__all__ = ["perf_hack", "seed_rand", "seed_data", "hash_tensor"]
+__all__ = ["perf_hack", "seed_rand", "seed_data", "hash_tensor", "hash_model"]
 
 
 def seed_rand(seed: int = 42):
@@ -52,16 +53,19 @@ def hash_tensor(x: torch.Tensor) -> str:
     """Returns deterministic hexdigest of tensor."""
     # Ops used here are to minimize copies.
     is_float = torch.is_floating_point(x)
-    # Prevent inplace modification of `x` when on "cpu".
-    if is_float and x.get_device() < 0:
-        x = x.clone(memory_format=torch.contiguous_format)
     # Using `x.numpy(force=True).data` is faster than `bytes(x.flatten().byte())`.
     x: np.ndarray = x.numpy(force=True)
     # At risk of collision, decrease precision due to floating point error.
     if is_float:
-        x -= x.min()
-        x *= 255 / (x.max() - x.min())
-        x = np.asarray(x, np.uint8, order="C")
+        x = np.interp(x, (x.min(), x.max()), (0, 255)).astype(np.uint8, order="C")
     # Standardize to contiguous array for deterministic hash.
     x = np.asarray(x, order="C")
     return hexdigest(x.data, seed=0)
+
+
+def hash_model(m: nn.Module) -> str:
+    """Returns deterministic hexdigest of model based on weights."""
+    return hexdigest(
+        "".join(f"{k}{hash_tensor(v)}" for k, v in sorted(m.state_dict().items())),
+        seed=0,
+    )

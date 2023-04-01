@@ -12,10 +12,11 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 from diskcache import Cache
 from torch.utils.data import default_collate
-from transformers import AutoImageProcessor, ViTModel
+from transformers import AutoImageProcessor
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from video_cv_project.cfg import CACHE_LAST_ATTNS, CACHE_PATCHES, RGB_MEAN, RGB_STD
+from video_cv_project.models.encoders import ViTLastAttnModel
 from video_cv_project.utils import hash_model, hash_tensor
 
 __all__ = [
@@ -188,7 +189,7 @@ class PatchAndViT(nn.Module):
         self.compile = compile
         self.compile_mode = None
 
-        enc: ViTModel = ViTModel.from_pretrained(
+        enc: ViTLastAttnModel = ViTLastAttnModel.from_pretrained(
             name, add_pooling_layer=False, torchscript=compile
         )
         self.enc = enc.to(device).eval().requires_grad_(False)

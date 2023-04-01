@@ -1,5 +1,6 @@
 """Data transforms."""
 
+from contextlib import ExitStack
 from io import BytesIO
 from multiprocessing import current_process, parent_process
 from typing import Callable, Dict, List, Sequence, Tuple
@@ -243,14 +244,9 @@ class PatchAndViT(nn.Module):
         self, hashes: List[str | None], pats_t: torch.Tensor, attns_t: torch.Tensor
     ):
         """Cache video on frame-level."""
-        for im_hash, pats, attns in zip(hashes, pats_t, attns_t):
-            # If None, it is already in cache.
-            if im_hash is None:
-                continue
-            self.cache.put_val(im_hash, CACHE_PATCHES, pats)  # CHW
-            self.cache.put_val(im_hash, CACHE_LAST_ATTNS, attns)  # NHW
+        return self.cache.put_vid(hashes, pats_t, attns_t)
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def __call__(self, ims: torch.Tensor) -> torch.Tensor:
         """Split TCHW images into patches and encode using ViT.
 
@@ -266,7 +262,7 @@ class PatchAndViT(nn.Module):
             return pats_t.to(ori_device)
 
         self._compile()
-        ims = ims.to(self.device)
+        ims = ims.to(self.device).requires_grad_(False)
 
         B = self.batch_size
         h, w = np.array(ims.shape[-2:]) // self.cfg.patch_size
@@ -275,8 +271,12 @@ class PatchAndViT(nn.Module):
         bats = []
         for t in range(0, len(ims), B):
             im = ims[t : t + B]
-            # Disable inference mode as compile requires grad version counter.
-            with torch.inference_mode(mode=self.compile_mode != "dynamo"):
+            with ExitStack() as stack:
+                # Disable inference mode as compile requires grad version counter.
+                if self.compile_mode == "dynamo":
+                    stack.enter_context(torch.inference_mode(False))
+                    stack.enter_context(torch.no_grad())
+
                 # Tuple of last_hidden_state, pooler_output, hidden_states, attentions.
                 # All except last_hidden_state is optional, so the tuple length
                 # varies depending on ViTConfig.
@@ -328,6 +328,17 @@ class TensorCache:
     def get_key(model_hash: str, tensor_hash: str, attr: str):
         """Get standardized cache key."""
         return f"{model_hash}/{attr}/{tensor_hash}"
+
+    def put_vid(
+        self, hashes: List[str | None], pats_t: torch.Tensor, attns_t: torch.Tensor
+    ):
+        """Cache video on frame-level."""
+        for im_hash, pats, attns in zip(hashes, pats_t, attns_t):
+            # If None, it is already in cache.
+            if im_hash is None:
+                continue
+            self.put_val(im_hash, CACHE_PATCHES, pats)  # CHW
+            self.put_val(im_hash, CACHE_LAST_ATTNS, attns)  # NHW
 
     def get_val(self, im_hash: str, attr: str) -> Tuple[str, torch.Tensor | None]:
         """Get associated key and value if already cached."""

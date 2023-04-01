@@ -1,6 +1,8 @@
 """Script to cache the dataset."""
 
 import logging
+from concurrent.futures import ProcessPoolExecutor as PoolExecutor
+from contextlib import ExitStack
 from typing import Dict
 
 import einops as E
@@ -17,6 +19,7 @@ from video_cv_project.utils import hash_model
 log = logging.getLogger(__name__)
 
 
+@torch.inference_mode()
 def cache(cfg: DictConfig):
     """Cache dataset."""
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
@@ -35,9 +38,11 @@ def cache(cfg: DictConfig):
     with open_dict(cfg):
         cfg.vid_cache.model_hash = model_hash
     log.info(f"ViTModel Hash: {model_hash}")
-    model = model.to(device).eval().requires_grad_(False)
+
+    model.to(device)
     if compile:
-        model = torch.compile(model, mode="default").eval()  # type: ignore
+        model = torch.compile(model, mode="max-autotune")  # type: ignore
+    model.eval().requires_grad_(False)
 
     cache = instantiate(cfg.vid_cache, _convert_="all")
     log.info(f"Tensor Cache: {cache}")
@@ -56,7 +61,7 @@ def cache(cfg: DictConfig):
     # Use Dict to avoid duplicate clips (due to high `num_clips_per_video`) and
     # otherwise same images (like complete black).
     queue: Dict[str, torch.Tensor] = {}
-    with torch.inference_mode():
+    with PoolExecutor(max_workers=cfg.data.num_workers) as pool:
         for i, n, video in trainer:
             for v in video:
                 queue.update(v)
@@ -69,13 +74,16 @@ def cache(cfg: DictConfig):
                     hashes.append(im_hash)
                     ims.append(im)
 
-                batch = torch.stack(ims).to(device)
+                batch = torch.stack(ims).to(device).requires_grad_(False)
                 h, w = np.array(batch.shape[-2:]) // model.config.patch_size
 
                 # Tuple of last_hidden_state, pooler_output, hidden_states, attentions.
                 # All except last_hidden_state is optional, so the tuple length
                 # varies depending on ViTConfig.
-                with torch.inference_mode(mode=not compile):
+                with ExitStack() as stack:
+                    if compile:
+                        stack.enter_context(torch.inference_mode(False))
+                        stack.enter_context(torch.no_grad())
                     o = model(batch, interpolate_pos_encoding=True)
 
                 pats_t = o[0]
@@ -87,6 +95,4 @@ def cache(cfg: DictConfig):
                     attns_t[:, :, 0, 1:], "t n (h w) -> t n h w", h=h, w=w
                 )
 
-                for im_hash, pats, attns in zip(hashes, pats_t, attns_t):
-                    cache.put_val(im_hash, CACHE_PATCHES, pats)
-                    cache.put_val(im_hash, CACHE_LAST_ATTNS, attns)
+                pool.submit(cache.put_vid, hashes, pats_t, attns_t)

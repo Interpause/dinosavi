@@ -15,8 +15,8 @@ from torch.utils.data import default_collate
 from transformers import AutoImageProcessor, ViTModel
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
-from video_cv_project.cfg import RGB_MEAN, RGB_STD
-from video_cv_project.utils import hash_tensor
+from video_cv_project.cfg import CACHE_LAST_ATTNS, CACHE_PATCHES, RGB_MEAN, RGB_STD
+from video_cv_project.utils import hash_model, hash_tensor
 
 __all__ = [
     "create_train_pipeline",
@@ -25,6 +25,7 @@ __all__ = [
     "PatchSplitTransform",
     "PatchAndJitter",
     "PatchAndViT",
+    "TensorCache",
     "HFTransform",
 ]
 
@@ -181,82 +182,72 @@ class PatchAndViT(nn.Module):
         super(PatchAndViT, self).__init__()
         self.name = name
         self.batch_size = batch_size
-        self.compile = compile
-        self._compiled = False
         self.cache_dir = cache_dir
-        self._cache = Cache(cache_dir)
         self.device = torch.device("cpu" if device is None else device)
+
+        self.compile = compile
+        self.compile_mode = None
 
         enc: ViTModel = ViTModel.from_pretrained(
             name, add_pooling_layer=False, torchscript=compile
         )
         self.enc = enc.to(device).eval().requires_grad_(False)
-        self._cfg = self.enc.config
+        self.cfg = self.enc.config
 
-        self._cfg.return_dict = False
+        self.cfg.return_dict = False
         # Both below can OOM if not careful.
-        # self._cfg.output_attentions = True
-        # self._cfg.output_hidden_states = True
+        self.cfg.output_attentions = True
+        # self.cfg.output_hidden_states = True
 
-    def _get_cache(self, x: torch.Tensor) -> Tuple[str, torch.Tensor | None]:
-        """Returns value from cache if already computed."""
-        k = f"{self.name}/{hash_tensor(x)}"
-        v = self._cache.get(k, default=None, read=True)
-        if v is not None:
-            # print(f"{current_process().name} LOAD: {k}")
-            v = torch.load(v, weights_only=True, map_location="cpu")
-        return k, v
-
-    def _put_cache(self, key: str, x: torch.Tensor):
-        """Put value into cache."""
-        # print(f"{current_process().name} SAVE: {key}")
-        buf = BytesIO()
-        x = x.detach().cpu().requires_grad_(False)
-        torch.save(x, buf)
-        buf.seek(0)
-        self._cache.set(key, buf, read=True, tag=self.name)
-
-    def _get_vid_cache(
-        self, vid: torch.Tensor
-    ) -> Tuple[List[str], torch.Tensor | None]:
-        """Cache video on frame-level."""
-        keys, vals = [], []
-        missing = False
-        for im in vid:
-            k, v = self._get_cache(im)
-            if v is None:
-                missing = True
-            keys.append(k if v is None else None)
-            vals.append(v)
-        return keys, None if missing else torch.stack(vals)  # type: ignore
-
-    def _put_vid_cache(self, keys: List[str], vid: torch.Tensor):
-        """Cache video on frame-level."""
-        for k, im in zip(keys, vid):
-            # If key is None, it is already in cache.
-            if k is None:
-                continue
-            self._put_cache(k, im)
+        self.cache = TensorCache(hash_model(enc), self.cache_dir)
 
     def _compile(self):
         """Cannot compile first when using multiprocessing. Must compile after fork."""
-        if not self.compile or self._compiled:
+        if not self.compile or self.compile_mode is not None:
             return
-        if parent_process() is not None:
-            self._compiled = "jit"
+        elif parent_process() is not None:
+            self.compile_mode = "jit"
             # Compile doesn't work inside a daemonic child process.
             # See: https://github.com/pytorch/pytorch/issues/97992
-            B, C, S = self.batch_size, self._cfg.num_channels, self._cfg.image_size
+            B, C, S = self.batch_size, self.cfg.num_channels, self.cfg.image_size
             x = torch.rand(B, C, S, S).to(self.device)
             with torch.no_grad():
                 traced = torch.jit.trace(self.enc, x)
             self.enc = torch.jit.optimize_for_inference(traced)
         else:
-            self._compiled = "dynamo"
+            self.compile_mode = "dynamo"
             # `dynamic` doesn't work for ViTModel.
             # Positional encoding interpolation cannot compile either.
             self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")  # type: ignore
             self.enc.eval()  # Compile resets eval for some reason.
+
+    def _get_vid_cache(
+        self, vid: torch.Tensor
+    ) -> Tuple[List[str | None], torch.Tensor | None, torch.Tensor | None]:
+        """Cache video on frame-level."""
+        hashes, pats_t, attns_t = [], [], []
+        for im in vid:
+            im_hash = hash_tensor(im)
+            _, pats = self.cache.get_val(im_hash, CACHE_PATCHES)
+            _, attns = self.cache.get_val(im_hash, CACHE_LAST_ATTNS)
+            hashes.append(im_hash if None in (pats, attns) else None)
+            pats_t.append(pats)
+            attns_t.append(attns)
+        miss = None in pats_t or None in attns_t
+        pats_t = None if miss else torch.stack(pats_t)  # type: ignore
+        attns_t = None if miss else torch.stack(attns_t)  # type: ignore
+        return hashes, pats_t, attns_t
+
+    def _put_vid_cache(
+        self, hashes: List[str | None], pats_t: torch.Tensor, attns_t: torch.Tensor
+    ):
+        """Cache video on frame-level."""
+        for im_hash, pats, attns in zip(hashes, pats_t, attns_t):
+            # If None, it is already in cache.
+            if im_hash is None:
+                continue
+            self.cache.put_val(im_hash, CACHE_PATCHES, pats)
+            self.cache.put_val(im_hash, CACHE_LAST_ATTNS, attns)
 
     @torch.no_grad()
     def __call__(self, ims: torch.Tensor) -> torch.Tensor:
@@ -269,51 +260,114 @@ class PatchAndViT(nn.Module):
             torch.Tensor: TCHW latent patches.
         """
         ori_device = ims.device
-        key, val = self._get_vid_cache(ims)
-        if val is not None:
-            return val.to(ori_device)
+        key, pats_t, attns_t = self._get_vid_cache(ims)
+        if pats_t is not None:
+            return pats_t.to(ori_device)
 
         self._compile()
         ims = ims.to(self.device)
 
         B = self.batch_size
-        h, w = np.array(ims.shape[-2:]) // self._cfg.patch_size
-        # print(ims[0:B].shape, self.encoder.device, self.encoder.training)
+        h, w = np.array(ims.shape[-2:]) // self.cfg.patch_size
+        # print(ims[0:B].shape)
 
         bats = []
         for t in range(0, len(ims), B):
             im = ims[t : t + B]
             # Disable inference mode as compile requires grad version counter.
-            with torch.inference_mode(mode=self._compiled != "dynamo"):
+            with torch.inference_mode(mode=self.compile_mode != "dynamo"):
                 # Tuple of last_hidden_state, pooler_output, hidden_states, attentions.
-                # All except last_hidden_state is optional, so the tuple might have
-                # varying length depending on ViTConfig.
+                # All except last_hidden_state is optional, so the tuple length
+                # varies depending on ViTConfig.
                 o = (
                     # Interpolation completely unsupported for `torch.jit`.
                     self.enc(im)
-                    if self._compiled == "jit"
+                    if self.compile_mode == "jit"
                     else self.enc(im, interpolate_pos_encoding=True)
                 )
 
             hiddens = o[0]
-            # attns = o[-1][-1]  # Keep only last layer attns.
+            attns = o[-1][-1]  # Keep only last layer attns.
             del o  # Save memory.
 
-            # for hid, attn in zip(hiddens, attns):
-            #     bats.append(dict(last_hidden_state=hid, attentions=(attn,)))
-            for hid in hiddens:
-                bats.append(dict(last_hidden_state=hid))
+            for hid, attn in zip(hiddens, attns):
+                bats.append(dict(last_hidden_state=hid, attentions=(attn,)))
 
         output = BaseModelOutputWithPooling(**default_collate(bats))
         pats = output.last_hidden_state
         pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
 
-        self._put_vid_cache(key, pats)
+        self._put_vid_cache(key, pats, output.attentions[-1])
         return pats.to(ori_device)
 
     def __repr__(self):
         """Return string representation of class."""
         return f"{self.__class__.__name__}(name={self.name}, compile={self.compile}, cache_dir={self.cache_dir}, device={self.device})"
+
+
+class TensorCache:
+    """Checks if results are already cached."""
+
+    def __init__(
+        self,
+        model_hash: str,
+        cache_dir: str = None,
+        attrs=[CACHE_PATCHES, CACHE_LAST_ATTNS],
+    ):
+        """Create CacheCheck."""
+        self.model_hash = model_hash
+        self.cache_dir = cache_dir
+        self.cache = Cache(cache_dir)
+        self.attrs = attrs
+
+    @staticmethod
+    def get_key(model_hash: str, tensor_hash: str, attr: str):
+        """Get standardized cache key."""
+        return f"{model_hash}/{attr}/{tensor_hash}"
+
+    def get_val(self, im_hash: str, attr: str) -> Tuple[str, torch.Tensor | None]:
+        """Get associated key and value if already cached."""
+        assert attr in self.attrs
+        k = self.get_key(self.model_hash, im_hash, attr)
+        v = self.cache.get(k, default=None, read=True)
+        if v is not None:
+            # print(f"{current_process().name} LOAD: {k}")
+            v = torch.load(v, weights_only=True, map_location="cpu")
+        return k, v
+
+    def put_val(self, im_hash: str, attr: str, val: torch.Tensor):
+        """Put tensor value into cache."""
+        k = self.get_key(self.model_hash, im_hash, attr)
+        # print(f"{current_process().name} SAVE: {k}")
+        buf = BytesIO()
+        val = val.detach().cpu().requires_grad_(False)
+        torch.save(val, buf)
+        buf.seek(0)
+        self.cache.set(k, buf, read=True, tag=self.model_hash)
+        return k
+
+    def __call__(self, vid: torch.Tensor) -> List[Tuple[str, torch.Tensor | None]]:
+        """Check if frames of video already in cache.
+
+        Args:
+            vid (torch.Tensor): TCHW images.
+
+        Returns:
+            List[Tuple[str, torch.Tensor | None]]: List of hashes and images (unless found).
+        """
+        results = []
+        for im in vid:
+            im_hash = hash_tensor(im)
+            found = all(
+                self.get_key(self.model_hash, im_hash, k) in self.cache
+                for k in self.attrs
+            )
+            results.append((im_hash, None if found else im))
+        return results
+
+    def __repr__(self):
+        """Return string representation of class."""
+        return f"{self.__class__.__name__}(model_hash={self.model_hash}, cache_dir={self.cache_dir}, keys={self.attrs})"
 
 
 class _ToTensor:

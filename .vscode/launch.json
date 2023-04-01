@@ -12,6 +12,7 @@
       "justMyCode": true,
       "args": ["mode=eval", "resume=latest.ckpt"],
       // "args": ["mode=train"],
+      // "args": ["mode=cache"],
       "env": {
         "CUDA_LAUNCH_BLOCKING": "1"
       }

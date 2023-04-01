@@ -10,35 +10,43 @@ defaults:
 mode: cache
 
 model:
-  _target_: video_cv_project.data.transform.PatchAndViT
-  name: ${vit_path}
-  # 512 + 256 + 128. Highest "nice" batch size for 48GB of VRAM.
-  batch_size: 896
-  compile: true
-  cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
+  _target_: video_cv_project.models.encoders.ViTLastAttnModel.from_pretrained
+  pretrained_model_name_or_path: ${vit_path}
+  add_pooling_layer: false
+  output_attentions: true
+  return_dict: false
+  torchscript: true
 
-train:
-  epochs: 1
-  log_every: 20
-  save_every: -1
+compile: true
+epochs: 1
+log_every: -1
+
+# 512 + 256 + 128. Highest "nice" batch size for 48GB of VRAM.
+# 512 is the highest "nice" number tested that doesn't run into an unknown CUDA error.
+batch_size: 512
 
 sampler:
   _target_: torchvision.datasets.samplers.UniformClipSampler
   # Kinetics400 videos are ~10s each. At 8 fps, each video has ~80 frames.
-  num_clips_per_video: 80
+  num_clips_per_video: 120
+
+vid_cache:
+  _target_: video_cv_project.data.transform.TensorCache
+  cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
 
 data:
-  cache_path: /home/jovyan/downloads/kinetics400-train.pt
-  batch_size: ${..model.batch_size}
-  num_workers: 32
+  # cache_path: /home/jovyan/downloads/kinetics400-train.pt
+  batch_size: null
+  num_workers: 16
   dataset:
     # Ensure every frame is cached.
     frames_per_clip: 1
-    step_between_clips: 1
-    split: train
+    step_between_clips: ${.frames_per_clip}
+    # split: train
 
   transform:
-    patch_func: null
+    # Workaround for config merge.
+    patch_func: ${vid_cache}
 
   # Workaround for config merge.
   sampler: ${sampler}

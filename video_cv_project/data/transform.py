@@ -2,7 +2,7 @@
 
 from io import BytesIO
 from multiprocessing import current_process, parent_process
-from typing import Callable, List, Sequence, Tuple
+from typing import Callable, Dict, List, Sequence, Tuple
 
 import einops as E
 import numpy as np
@@ -247,8 +247,8 @@ class PatchAndViT(nn.Module):
             # If None, it is already in cache.
             if im_hash is None:
                 continue
-            self.cache.put_val(im_hash, CACHE_PATCHES, pats)
-            self.cache.put_val(im_hash, CACHE_LAST_ATTNS, attns)
+            self.cache.put_val(im_hash, CACHE_PATCHES, pats)  # CHW
+            self.cache.put_val(im_hash, CACHE_LAST_ATTNS, attns)  # NHW
 
     @torch.no_grad()
     def __call__(self, ims: torch.Tensor) -> torch.Tensor:
@@ -297,13 +297,16 @@ class PatchAndViT(nn.Module):
         output = BaseModelOutputWithPooling(**default_collate(bats))
         pats = output.last_hidden_state
         pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
-
-        self._put_vid_cache(key, pats, output.attentions[-1])
+        # TNPQ, where N is heads, P is each token, and Q are weights.
+        attns = output.attentions[-1]
+        # We only need the attention weights of the CLS token (token 0).
+        attns = E.rearrange(attns[:, :, 0, 1:], "t n (h w) -> t n h w", h=h, w=w)
+        self._put_vid_cache(key, pats, attns)
         return pats.to(ori_device)
 
     def __repr__(self):
         """Return string representation of class."""
-        return f"{self.__class__.__name__}(name={self.name}, compile={self.compile}, cache_dir={self.cache_dir}, device={self.device})"
+        return f"{self.__class__.__name__}(model_hash={self.cache.model_hash}, name={self.name}, compile={self.compile}, cache_dir={self.cache_dir}, device={self.device})"
 
 
 class TensorCache:
@@ -347,23 +350,24 @@ class TensorCache:
         self.cache.set(k, buf, read=True, tag=self.model_hash)
         return k
 
-    def __call__(self, vid: torch.Tensor) -> List[Tuple[str, torch.Tensor | None]]:
+    def __call__(self, vid: torch.Tensor) -> Dict[str, torch.Tensor | None]:
         """Check if frames of video already in cache.
 
         Args:
             vid (torch.Tensor): TCHW images.
 
         Returns:
-            List[Tuple[str, torch.Tensor | None]]: List of hashes and images (unless found).
+            Dict[str, torch.Tensor | None]: Hashes and images not in cache.
         """
-        results = []
+        results = {}
         for im in vid:
             im_hash = hash_tensor(im)
             found = all(
                 self.get_key(self.model_hash, im_hash, k) in self.cache
                 for k in self.attrs
             )
-            results.append((im_hash, None if found else im))
+            if not found:
+                results[im_hash] = im
         return results
 
     def __repr__(self):

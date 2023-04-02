@@ -30,7 +30,7 @@ sampler:
   num_clips_per_video: 15
 
 vid_cache:
-  _target_: video_cv_project.data.transform.TensorCache
+  _target_: video_cv_project.data.cache.TensorCache
   cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
 
 data:

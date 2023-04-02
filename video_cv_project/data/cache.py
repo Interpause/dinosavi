@@ -2,6 +2,7 @@
 
 
 from io import BytesIO
+from lzma import compress, decompress
 from multiprocessing import current_process
 from pathlib import Path
 from pickle import HIGHEST_PROTOCOL
@@ -29,12 +30,12 @@ class TorchDisk(Disk):
         if not read and isinstance(value, torch.Tensor):
             buf = BytesIO()
             torch.save(
-                value,
+                value.half(),
                 buf,
                 pickle_protocol=self.pickle_protocol,
                 _use_new_zipfile_serialization=False,
             )
-            value = buf.getvalue()
+            value = compress(buf.getbuffer())
         return super(TorchDisk, self).store(value, read, key)
 
     def fetch(self, mode, filename, value, read):
@@ -42,7 +43,10 @@ class TorchDisk(Disk):
         data = super(TorchDisk, self).fetch(mode, filename, value, read)
         if not read and isinstance(data, bytes):
             try:
-                data = torch.load(BytesIO(data), weights_only=True, map_location="cpu")
+                data = decompress(data)
+                data = torch.load(
+                    BytesIO(data), weights_only=True, map_location="cpu"
+                ).float()
             except:
                 pass
         return data

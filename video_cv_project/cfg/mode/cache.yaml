@@ -22,7 +22,6 @@ epochs: 1
 log_every: -1
 
 batch_size: 512
-num_writers: 32
 
 sampler:
   _target_: torchvision.datasets.samplers.UniformClipSampler

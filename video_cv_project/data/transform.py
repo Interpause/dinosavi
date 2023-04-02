@@ -14,7 +14,7 @@ from torch.utils.data import default_collate
 from transformers import AutoImageProcessor
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
-from video_cv_project.cfg import RGB_MEAN, RGB_STD
+from video_cv_project.cfg import CACHE_LAST_ATTNS, CACHE_PATCHES, RGB_MEAN, RGB_STD
 from video_cv_project.models.encoders import ViTLastAttnModel
 from video_cv_project.utils import hash_model
 
@@ -224,18 +224,6 @@ class PatchAndViT(nn.Module):
         #     self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")  # type: ignore
         #     self.enc.eval()  # Compile resets eval for some reason.
 
-    def _get_vid_cache(
-        self, vid: torch.Tensor
-    ) -> Tuple[List[str | None], torch.Tensor | None, torch.Tensor | None]:
-        """Cache video on frame-level."""
-        return self.cache.get_vid(vid)
-
-    def _put_vid_cache(
-        self, hashes: List[str | None], pats_t: torch.Tensor, attns_t: torch.Tensor
-    ):
-        """Cache video on frame-level."""
-        return self.cache.put_vid(hashes, pats_t, attns_t)
-
     @torch.inference_mode()
     def __call__(self, ims: torch.Tensor) -> torch.Tensor:
         """Split TCHW images into patches and encode using ViT.
@@ -247,9 +235,9 @@ class PatchAndViT(nn.Module):
             torch.Tensor: TCHW latent patches.
         """
         ori_device = ims.device
-        key, pats_t, attns_t = self._get_vid_cache(ims)
-        if pats_t is not None:
-            return pats_t.to(ori_device)
+        key, cached = self.cache.get_vid(ims)
+        if cached is not None:
+            return cached[CACHE_PATCHES].to(ori_device)
 
         self._compile()
         ims = ims.to(self.device).requires_grad_(False)
@@ -291,7 +279,7 @@ class PatchAndViT(nn.Module):
         attns = output.attentions[-1]
         # We only need the attention weights of the CLS token (token 0).
         attns = E.rearrange(attns[:, :, 0, 1:], "t n (h w) -> t n h w", h=h, w=w)
-        self._put_vid_cache(key, pats, attns)
+        self.cache.put_vid(key, {CACHE_PATCHES: pats, CACHE_LAST_ATTNS: attns})
         return pats.to(ori_device)
 
     def __repr__(self):

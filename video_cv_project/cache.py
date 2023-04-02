@@ -12,7 +12,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, open_dict
 from transformers import ViTModel
 
-from video_cv_project.cfg import BEST_DEVICE
+from video_cv_project.cfg import BEST_DEVICE, CACHE_LAST_ATTNS, CACHE_PATCHES
 from video_cv_project.data import create_kinetics_dataloader
 from video_cv_project.engine import Trainer
 from video_cv_project.utils import hash_model
@@ -45,7 +45,6 @@ def cache(cfg: DictConfig):
     compile = cfg.compile
     log_every = cfg.log_every
     batch_size = cfg.batch_size
-    num_writers = cfg.num_writers
 
     log.info(f"Torch Device: {device}")
     log.info(f"Epochs: {epochs}")
@@ -75,8 +74,9 @@ def cache(cfg: DictConfig):
         dataloader, epochs, logger=log, log_every=log_every, save_every=-1
     )
 
+    num_writers = type(cache).SETTINGS["shards"]
     semaphore = BoundedSemaphore(num_writers)
-    log.info(f"Workers for Write: {num_writers}")
+    log.info(f"Dataset Shards/Num Concurrent Writers: {num_writers}")
 
     def done(future):
         nonlocal semaphore
@@ -122,5 +122,9 @@ def cache(cfg: DictConfig):
                     log.debug("Waiting for write pool to free up...")
                     semaphore.acquire(block=True)
                     log.debug("Semaphore acquired.")
-                future = pool.submit(cache.put_vid, hashes, pats_t.cpu(), attns_t.cpu())
+                future = pool.submit(
+                    cache.put_vid,
+                    hashes,
+                    {CACHE_PATCHES: pats_t.cpu(), CACHE_LAST_ATTNS: attns_t.cpu()},
+                )
                 future.add_done_callback(done)

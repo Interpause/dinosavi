@@ -3,10 +3,11 @@
 
 from io import BytesIO
 from multiprocessing import current_process
+from pickle import HIGHEST_PROTOCOL
 from typing import Dict, List, Tuple
 
 import torch
-from diskcache import Cache
+from diskcache import UNKNOWN, Cache, Disk
 
 from video_cv_project.cfg import CACHE_LAST_ATTNS, CACHE_PATCHES
 from video_cv_project.utils import hash_tensor
@@ -14,8 +15,49 @@ from video_cv_project.utils import hash_tensor
 __all__ = ["TensorCache"]
 
 
+class TorchDisk(Disk):
+    """Use `torch.save` to serialize & load tensors."""
+
+    def store(self, value, read, key=UNKNOWN):
+        """Override."""
+        # Pickle: 2.12 ms ± 53 µs
+        # Torch (zipfile): 3.46 ms ± 20.5 µs
+        # Torch (legacy): 265 µs ± 2.86 µs
+        # Legacy format much smaller for single tensors.
+        if not read and isinstance(value, torch.Tensor):
+            buf = BytesIO()
+            torch.save(
+                value,
+                buf,
+                pickle_protocol=self.pickle_protocol,
+                _use_new_zipfile_serialization=False,
+            )
+            value = buf.getvalue()
+        return super(TorchDisk, self).store(value, read, key)
+
+    def fetch(self, mode, filename, value, read):
+        """Override."""
+        data = super(TorchDisk, self).fetch(mode, filename, value, read)
+        if not read and isinstance(data, bytes):
+            try:
+                data = torch.load(BytesIO(data), weights_only=True, map_location="cpu")
+            except:
+                pass
+        return data
+
+
 class TensorCache:
     """Checks if results are already cached."""
+
+    # https://grantjenks.com/docs/diskcache/api.html?highlight=default_settings#diskcache.diskcache.DEFAULT_SETTINGS
+    SETTINGS = dict(
+        statistics=0,
+        tag_index=1,
+        eviction_policy="none",
+        size_limit=1099511627776,  # 1 TiB
+        cull_limit=0,
+        disk_pickle_protocol=HIGHEST_PROTOCOL,
+    )
 
     def __init__(
         self,
@@ -26,8 +68,9 @@ class TensorCache:
         """Create CacheCheck."""
         self.model_hash = model_hash
         self.cache_dir = cache_dir
-        self.cache = Cache(cache_dir)
         self.attrs = attrs
+
+        self.cache = Cache(cache_dir, disk=TorchDisk, **self.SETTINGS)
 
     @staticmethod
     def get_key(model_hash: str, tensor_hash: str, attr: str):
@@ -38,21 +81,17 @@ class TensorCache:
         """Get associated key and value if already cached."""
         assert attr in self.attrs
         k = self.get_key(self.model_hash, im_hash, attr)
-        v = self.cache.get(k, default=None, read=True)
-        if v is not None:
-            # print(f"{current_process().name} LOAD: {k}")
-            v = torch.load(v, weights_only=True, map_location="cpu")
+        v = self.cache.get(k, default=None)
+        # if v is not None:
+        #     print(f"{current_process().name} LOAD: {k}")
         return k, v
 
     def put_val(self, im_hash: str, attr: str, val: torch.Tensor):
         """Put tensor value into cache."""
         k = self.get_key(self.model_hash, im_hash, attr)
         # print(f"{current_process().name} SAVE: {k}")
-        buf = BytesIO()
-        val = val.detach().cpu().requires_grad_(False)
-        torch.save(val, buf)
-        buf.seek(0)
-        self.cache.set(k, buf, read=True, tag=self.model_hash)
+        v = val.detach().cpu().requires_grad_(False)
+        self.cache.set(k, v, tag=self.model_hash)
         return k
 
     def get_vid(

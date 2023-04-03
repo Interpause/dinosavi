@@ -348,10 +348,9 @@ class HFTransform:
         Returns:
             torch.Tensor: Processed tensor.
         """
-        # Since only CHW images given when used in `create_pipeline`, there's extra batch dimension.
         if self._workaround:
-            x = x * 255
-        return self._p(x, return_tensors="pt").pixel_values[0]
+            x = T.functional.to_pil_image(x)
+        return self._p([x], return_tensors="pt").pixel_values[0]
 
     def __repr__(self):
         """Return string representation of class."""

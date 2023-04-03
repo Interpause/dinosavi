@@ -135,10 +135,7 @@ def batched_affinity(
 
         # Indexes of top-k pixels and their affinities.
         # NOTE: https://github.com/pytorch/pytorch/issues/82569
-        # Bug with `torch.topk` since 1.13.1.
-        # Mitigation: Reduce size of affinity matrix by decreasing batch size,
-        # context length, batching at pixel level, or using sparse matrix.
-        # Alternatively, use PyTorch 2.0.
+        # Must use PyTorch 2.0 for `torch.topk` to work with large matrices.
         weights, idx = A.topk(topk, dim=1)
         weights = F.softmax(weights / temperature, dim=1)
 

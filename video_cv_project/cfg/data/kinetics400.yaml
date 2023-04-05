@@ -24,5 +24,8 @@ dataset:
   output_format: TCHW
 
 sampler:
-  _target_: torchvision.datasets.samplers.RandomClipSampler
-  max_clips_per_video: ${..clips_per_vid}
+  # _target_: torchvision.datasets.samplers.RandomClipSampler
+  # max_clips_per_video: ${..clips_per_vid}
+  _target_: torchvision.datasets.samplers.UniformClipSampler
+  # Kinetics400 videos are ~10s each. At 8 fps, each video has ~80 frames.
+  num_clips_per_video: ${..clips_per_vid}

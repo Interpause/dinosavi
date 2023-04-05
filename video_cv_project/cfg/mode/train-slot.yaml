@@ -20,7 +20,7 @@ train:
   # TODO: Optimizer/scheduler can be its own sub-config.
   optimizer:
     _target_: torch.optim.Adam
-    lr: 0.0001
+    lr: 0.0002
 
   scheduler:
     _target_: torch.optim.lr_scheduler.OneCycleLR
@@ -30,12 +30,12 @@ train:
 
 data:
   # cache_path: /home/jovyan/downloads/kinetics400-train.pt
-  batch_size: 12
-  num_workers: 12
+  batch_size: 16
+  num_workers: 16
   clips_per_vid: 2
   dataset:
-    frames_per_clip: 32
-    step_between_clips: 24
+    frames_per_clip: 8
+    step_between_clips: ${.frames_per_clip}
     # split: train
 
   transform:

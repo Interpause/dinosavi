@@ -1,8 +1,8 @@
 # Config for SlotCPC model.
 
-time_steps: 5
-num_slots: 7
-num_iters: 2
+time_steps: 2
+num_slots: 8
+num_iters: 1
 ini_iters: 3
 _target_: video_cv_project.models.SlotCPC
 model:

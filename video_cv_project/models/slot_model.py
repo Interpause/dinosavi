@@ -216,7 +216,8 @@ class SlotCPC(nn.Module):
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 
         loss, debug = mse_loss(x, y)
-        debug["slot_attn"] = tb_viz_slots(pats_t[-1, -1], attn_t[-1, -1])
+        # NOTE: When logs are flushed to disk, this takes significant time to write.
+        # debug["slot_attn"] = tb_viz_slots(pats_t[-1, -1], attn_t[-1, -1])
         if self.is_trace:
             return loss  # type: ignore
         return loss, debug

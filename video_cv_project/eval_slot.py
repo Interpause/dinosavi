@@ -119,9 +119,8 @@ def eval(cfg: DictConfig):
 
             save_dir = out_dir / "results"
 
-            ims = ims.to(device)
             t_infer = time()
-            pats_t = encoder(ims)
+            pats_t = encoder(ims).to(device)
             colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
             preds_a = attn_weight_method(model.model, pats_t)
             # preds_b = alpha_mask_method(model, pats_t)

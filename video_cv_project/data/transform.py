@@ -240,7 +240,7 @@ class PatchAndViT(nn.Module):
             return cached[CACHE_PATCHES].to(ori_device)
 
         self._compile()
-        ims = ims.to(self.device).requires_grad_(False)
+        ims = ims.requires_grad_(False)
 
         B = self.batch_size
         h, w = np.array(ims.shape[-2:]) // self.cfg.patch_size
@@ -248,7 +248,7 @@ class PatchAndViT(nn.Module):
 
         bats = []
         for t in range(0, len(ims), B):
-            im = ims[t : t + B]
+            im = ims[t : t + B].to(self.device)
             with ExitStack() as stack:
                 # Disable inference mode as compile requires grad version counter.
                 if self.compile_mode == "dynamo":
@@ -266,10 +266,11 @@ class PatchAndViT(nn.Module):
                 )
 
             hiddens = o[0]
-            attns = o[-1][-1]  # Keep only last layer attns.
-            del o  # Save memory.
+            attns = o[-1]
+            # Keep only last layer attns of CLS token (token 0).
+            attns = attns[-1][:, :, 0, 1:]
 
-            for hid, attn in zip(hiddens, attns):
+            for hid, attn in zip(hiddens.to(ori_device), attns.to(ori_device)):
                 bats.append(dict(last_hidden_state=hid, attentions=(attn,)))
 
         output = BaseModelOutputWithPooling(**default_collate(bats))
@@ -277,8 +278,7 @@ class PatchAndViT(nn.Module):
         pats = E.rearrange(pats[:, 1:], "t (h w) c -> t c h w", h=h, w=w)
         # TNPQ, where N is heads, P is each token, and Q are weights.
         attns = output.attentions[-1]
-        # We only need the attention weights of the CLS token (token 0).
-        attns = E.rearrange(attns[:, :, 0, 1:], "t n (h w) -> t n h w", h=h, w=w)
+        attns = E.rearrange(attns, "t n (h w) -> t n h w", h=h, w=w)
         self.cache.put_vid(key, {CACHE_PATCHES: pats, CACHE_LAST_ATTNS: attns})
         return pats.to(ori_device)
 

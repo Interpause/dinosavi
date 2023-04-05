@@ -40,15 +40,13 @@ class TorchDisk(Disk):
 
     def fetch(self, mode, filename, value, read):
         """Override."""
-        data = super(TorchDisk, self).fetch(mode, filename, value, read)
+        ori = data = super(TorchDisk, self).fetch(mode, filename, value, read)
         if not read and isinstance(data, bytes):
             try:
                 data = decompress(data)
-                data = torch.load(
-                    BytesIO(data), weights_only=True, map_location="cpu"
-                ).float()
+                data = torch.load(BytesIO(data), map_location="cpu").float()
             except:
-                pass
+                return ori
         return data
 
 

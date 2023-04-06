@@ -23,5 +23,5 @@ data:
 
     patch_func:
       compile: false
-      batch_size: 1
+      batch_size: 4
       device: cuda

@@ -19,8 +19,8 @@ from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
 log = logging.getLogger(__name__)
 
-NUM_SLOTS = 8
-INI_ITERS = 3
+NUM_SLOTS = 7
+INI_ITERS = 1
 NUM_ITERS = 1
 TENSORBOARD_DIR = "."
 

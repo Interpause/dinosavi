@@ -47,7 +47,8 @@ class DAVISDataset(VOSDataset):
             im_paths = sorted(im_dir.glob("*.jpg"), key=lambda p: int(p.stem))
             lbl_paths = sorted(lbl_dir.glob("*.png"), key=lambda p: int(p.stem))
             im_dirs.append((str(im_dir), [str(p) for p in im_paths]))
-            lbl_dirs.append((str(lbl_dir), [str(p) for p in lbl_paths]))
+            if len(lbl_paths) > 0:
+                lbl_dirs.append((str(lbl_dir), [str(p) for p in lbl_paths]))
 
         super().__init__(
             im_dirs, lbl_dirs, im_size, transform, map_scale, context_len, True

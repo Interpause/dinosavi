@@ -119,23 +119,24 @@ def eval(cfg: DictConfig):
 
             save_dir = out_dir / "results"
 
+            colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
+
             t_infer = time()
             pats_t = encoder(ims).to(device)
-            colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
             preds_a = attn_weight_method(model.model, pats_t)
             # preds_b = alpha_mask_method(model, pats_t)
-            tb_log_preds(writer, f"vid{i}-attn", preds_a)
             # tb_log_preds(writer, f"vid{i}-alpha", preds_b)
             # Interleave the two predictions for visualization.
             # preds = torch.stack([i for pair in zip(preds_a, preds_b) for i in pair])
             # im_paths = [
             #     i for pair in zip(meta["im_paths"], meta["im_paths"]) for i in pair
             # ]
+            log.debug(f"Inference: {time() - t_infer:.4f} s")
             im_paths = meta["im_paths"]
             preds = preds_a
-            log.debug(f"Inference: {time() - t_infer:.4f} s")
 
             t_save = time()
+            tb_log_preds(writer, f"vid{i}-attn", preds_a)
             dump_vos_preds(
                 save_dir,
                 im_paths,

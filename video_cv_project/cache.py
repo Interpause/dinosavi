@@ -74,7 +74,7 @@ def cache(cfg: DictConfig):
         dataloader, epochs, logger=log, log_every=log_every, save_every=-1
     )
 
-    num_writers = type(cache).SETTINGS["shards"]
+    num_writers = cfg.data.num_workers  # type(cache).SETTINGS["shards"]
     semaphore = BoundedSemaphore(num_writers)
     log.info(f"Dataset Shards/Num Concurrent Writers: {num_writers}")
 

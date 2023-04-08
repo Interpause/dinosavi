@@ -2,14 +2,14 @@
 
 
 from io import BytesIO
-from lzma import compress, decompress
+from lzma import PRESET_EXTREME, compress, decompress
 from multiprocessing import current_process
 from pathlib import Path
 from pickle import HIGHEST_PROTOCOL
 from typing import Dict, List, Tuple
 
 import torch
-from diskcache import UNKNOWN, Disk, FanoutCache
+from diskcache import UNKNOWN, Cache, Disk, FanoutCache
 from torch.utils.data import default_collate
 
 from video_cv_project.cfg import CACHE_LAST_ATTNS, CACHE_PATCHES
@@ -29,13 +29,17 @@ class TorchDisk(Disk):
         # Legacy format much smaller for single tensors.
         if not read and isinstance(value, torch.Tensor):
             buf = BytesIO()
+            # Halving reduces the size by over 700 times even before compression. IDK why.
             torch.save(
                 value.half(),
                 buf,
                 pickle_protocol=self.pickle_protocol,
                 _use_new_zipfile_serialization=False,
             )
-            value = compress(buf.getbuffer())
+            # XZ has compression ratio of 1.1 after halving.
+            # Surprisingly, -0e and -9e have the same size, suggesting the data
+            # is compressible in a very specific manner. -0e is much faster though.
+            value = compress(buf.getbuffer(), preset=0 | PRESET_EXTREME)
         return super(TorchDisk, self).store(value, read, key)
 
     def fetch(self, mode, filename, value, read):
@@ -55,14 +59,14 @@ class TensorCache:
 
     # https://grantjenks.com/docs/diskcache/api.html?highlight=default_settings#diskcache.diskcache.DEFAULT_SETTINGS
     SETTINGS = dict(
-        shards=16,
+        # shards=16,
         disk=TorchDisk,
         statistics=0,
         tag_index=0,
         eviction_policy="none",
-        size_limit=1099511627776,  # 1 TiB
+        # size_limit=1099511627776,  # 1 TiB; `eviction_policy` of "none" ignores this.
         cull_limit=0,
-        disk_min_file_size=77070336,  # 9408 KiB
+        # disk_min_file_size=77070336,  # 9408 KiB
         disk_pickle_protocol=HIGHEST_PROTOCOL,
     )
 
@@ -77,8 +81,11 @@ class TensorCache:
         self.cache_dir = Path(".cache" if cache_dir is None else cache_dir) / model_hash
         self.attrs = attrs
 
+        # self.cache = {
+        #     attr: FanoutCache(self.cache_dir / attr, **self.SETTINGS) for attr in attrs
+        # }
         self.cache = {
-            attr: FanoutCache(self.cache_dir / attr, **self.SETTINGS) for attr in attrs
+            attr: Cache(self.cache_dir / attr, **self.SETTINGS) for attr in attrs
         }
 
     def get_val(self, im_hash: str, attr: str) -> torch.Tensor | None:
@@ -130,6 +137,10 @@ class TensorCache:
         for im in vid:
             im_hash = hash_tensor(im)
             found = all(im_hash in self.cache[attr] for attr in self.attrs)
+            # Below can be used to verify integrity.
+            # found = all(
+            #     self.cache[attr].get(im_hash) is not None for attr in self.attrs
+            # )
             if not found:
                 results[im_hash] = im
         return results

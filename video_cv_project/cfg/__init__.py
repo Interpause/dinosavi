@@ -7,7 +7,6 @@ __all__ = [
     "RGB_MEAN",
     "RGB_STD",
     "BEST_DEVICE",
-    "PENALTY",
     "CACHE_PATCHES",
     "CACHE_LAST_ATTNS",
 ]
@@ -19,8 +18,6 @@ RGB_MEAN = (0.4914, 0.4822, 0.4465)
 RGB_STD = (0.2023, 0.1994, 0.2010)
 
 BEST_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-PENALTY = -1e8
 
 CACHE_PATCHES = "pat"
 CACHE_LAST_ATTNS = "attn/-1"

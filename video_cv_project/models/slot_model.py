@@ -1,6 +1,6 @@
 """Main model contribution."""
 
-from typing import Tuple, List
+from typing import Tuple, Sequence
 
 import einops as E
 import torch
@@ -140,7 +140,7 @@ class SlotCPC(nn.Module):
         self,
         model: SlotModel,
         decoder: SlotDecoder,
-        time_steps: List[int] | int = 2,
+        time_steps: Sequence[int] | int = 2,
         num_slots: int = 7,
         num_iters: int = 3,
         ini_iters: int = None,
@@ -150,7 +150,7 @@ class SlotCPC(nn.Module):
         Args:
             model (SlotModel): Slot model.
             decoder (SlotDecoder): Decodes slot to features.
-            time_steps (List[int] | int, optional): Up to which time step to predict to. Defaults to 2.
+            time_steps (Sequence[int] | int, optional): Up to which time step to predict to. Defaults to 2.
             num_slots (int, optional): Number of slots to create. Defaults to 7.
             num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
             ini_iters (int, optional): Number of iterations for slots to bind when first initialized. Defaults to `num_iters`.

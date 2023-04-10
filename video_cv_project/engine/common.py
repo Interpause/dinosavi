@@ -7,7 +7,7 @@ import einops as E
 import torch
 import torch.nn.functional as F
 
-from video_cv_project.cfg import BEST_DEVICE, PENALTY
+from video_cv_project.cfg import BEST_DEVICE
 
 __all__ = [
     "calc_context_frame_idx",
@@ -117,7 +117,7 @@ def batched_affinity(
     # Hardcode to 1, see below note on issue with `torch.topk`.
     b = 1  # batch_size
     # Penalty to hard mask pixels outside radius.
-    mask = (mask * PENALTY).to(device)
+    mask = mask.float().to(device).masked_fill(mask, float("-inf"))
 
     Is, Ws = [], []
     for t in range(0, len(keys), b):

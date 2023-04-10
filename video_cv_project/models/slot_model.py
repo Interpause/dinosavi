@@ -1,6 +1,6 @@
 """Main model contribution."""
 
-from typing import Tuple
+from typing import Tuple, List
 
 import einops as E
 import torch
@@ -140,7 +140,7 @@ class SlotCPC(nn.Module):
         self,
         model: SlotModel,
         decoder: SlotDecoder,
-        time_steps: int = 2,
+        time_steps: List[int] | int = 2,
         num_slots: int = 7,
         num_iters: int = 3,
         ini_iters: int = None,
@@ -150,7 +150,7 @@ class SlotCPC(nn.Module):
         Args:
             model (SlotModel): Slot model.
             decoder (SlotDecoder): Decodes slot to features.
-            time_steps (int, optional): Up to which time step to predict to. Defaults to 2.
+            time_steps (List[int] | int, optional): Up to which time step to predict to. Defaults to 2.
             num_slots (int, optional): Number of slots to create. Defaults to 7.
             num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
             ini_iters (int, optional): Number of iterations for slots to bind when first initialized. Defaults to `num_iters`.
@@ -159,10 +159,12 @@ class SlotCPC(nn.Module):
 
         self.model = model
         self.decoder = decoder
-        self.time_steps = time_steps
-        self.num_preds = time_steps + 1  # Include t+0.
+        self.time_steps = (
+            list(range(time_steps + 1)) if isinstance(time_steps, int) else time_steps
+        )
         self.time_mlp = nn.ModuleList(
-            nn.Linear(model.slot_dim, model.slot_dim) for _ in range(self.num_preds)
+            nn.Linear(model.slot_dim, model.slot_dim)
+            for _ in range(len(self.time_steps))
         )
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
@@ -175,7 +177,7 @@ class SlotCPC(nn.Module):
         """Propagate slots forward in time."""
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
         s, slots_t, attn_t = None, [], []
-        T, i = len(pats) - self.time_steps, self.ini_iters
+        T, i = len(pats) - max(self.time_steps), self.ini_iters
         for p in pats[:T]:
             # TODO: Might intermediate attention masks be useful for something?
             s, w = self.model.forward(p, s, self.num_slots, i)
@@ -203,7 +205,7 @@ class SlotCPC(nn.Module):
         slots_t, attn_t = self._prop_slots(pats_t)
 
         # Predict future time steps simultaneously.
-        T, P = len(slots_t), self.num_preds
+        T, P = len(slots_t), len(self.time_steps)
         h, w = pats_t.shape[-2:]
         x = self._pred_feats(slots_t, (h, w))
         # Flatten every pixel in batch together for InfoNCE.
@@ -211,7 +213,7 @@ class SlotCPC(nn.Module):
         x = self.layernorm(x)  # Uniformity with ViT.
 
         # Get corresponding time steps for each prediction.
-        idx = torch.arange(P).expand(T, -1) + torch.arange(T).view(-1, 1)
+        idx = torch.tensor(self.time_steps).expand(T, -1) + torch.arange(T).view(-1, 1)
         y = pats_t[idx]
         y = E.rearrange(y, "t p b c h w -> p t (b h w) c")
 

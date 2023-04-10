@@ -63,6 +63,7 @@ def alpha_mask_method(
         i = num_iters
     slots_t = torch.stack(slots)
     preds = model.time_mlp[0](slots_t)
+    # TODO: add batching here.
     preds = E.rearrange(preds, "t 1 s c -> t s c")
     preds = decoder.get_alpha_masks(preds, (h, w))
     return preds

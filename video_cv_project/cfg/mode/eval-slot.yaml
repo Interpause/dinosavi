@@ -3,10 +3,21 @@
 
 defaults:
   - slot-base
-  - override /model: slot
+  # Model config loaded from checkpoint.
+  - override /model: none
   - override /data: davis
 
 mode: eval-slot
+
+# If None, will be detected from model.
+num_slots:
+num_iters:
+ini_iters:
+
+# Output to use:
+# - slot: Slot Attention weights.
+# - alpha: Alpha mask from Decoder.
+output: slot # alpha
 
 data:
   dataset:

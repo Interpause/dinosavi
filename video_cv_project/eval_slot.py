@@ -19,39 +19,48 @@ from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
 log = logging.getLogger(__name__)
 
-NUM_SLOTS = 7
-INI_ITERS = 1
-NUM_ITERS = 1
 TENSORBOARD_DIR = "."
 
 
-def attn_weight_method(model: SlotModel, pats_t: torch.Tensor):
+def attn_weight_method(
+    model: SlotModel,
+    pats_t: torch.Tensor,
+    num_slots: int = 7,
+    num_iters: int = 1,
+    ini_iters: int = 1,
+):
     """Use Slot Attention weights as labels."""
-    slots = None
+    s = None
+    h, w = pats_t.shape[-2:]
     pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
     weights: List[torch.Tensor] = []
-    size_hw = pats_t.shape[-2:]
-    i = INI_ITERS
-    for pats in pats_t:
-        slots, attn = model.forward(pats, slots, num_slots=NUM_SLOTS, num_iters=i)
+    i = ini_iters
+    for p in pats_t:
+        s, attn = model.forward(p, s, num_slots, i)
         weights.append(attn)
-        i = NUM_ITERS
-    h, w = size_hw
+        i = num_iters
     preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
     return preds
 
 
-def alpha_mask_method(model: SlotCPC, pats_t: torch.Tensor):
+def alpha_mask_method(
+    model: SlotCPC,
+    pats_t: torch.Tensor,
+    num_slots: int = 7,
+    num_iters: int = 1,
+    ini_iters: int = 1,
+):
     """Use AlphaSlotDecoder alpha masks as labels."""
-    decoder: AlphaSlotDecoder = model.decoder  # type: ignore
     s = None
     h, w = pats_t.shape[-2:]
+    pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
+    decoder: AlphaSlotDecoder = model.decoder  # type: ignore
     slots = []
-    i = INI_ITERS
+    i = ini_iters
     for p in pats_t:
-        s, _ = model.model.forward(p, s, NUM_SLOTS, i)
+        s, _ = model.model.forward(p, s, num_slots, i)
         slots.append(s)
-        i = NUM_ITERS
+        i = num_iters
     slots_t = torch.stack(slots)
     preds = model.time_mlp[0](slots_t)
     preds = E.rearrange(preds, "t 1 s c -> t s c")
@@ -76,15 +85,27 @@ def eval(cfg: DictConfig):
     device = torch.device(cfg.device if cfg.device else BEST_DEVICE)
     log.info(f"Torch Device: {device}")
 
-    log.debug("Create Model.")
-    model = instantiate(cfg.model, _convert_="all")
-    checkpointer = Checkpointer(model=model)
+    checkpointer = Checkpointer()
     checkpointer.load(root_dir / cfg.resume)
     # TODO: What config values to overwrite?
     old_cfg = OmegaConf.create(checkpointer.cfg)
-    log.debug(f"Ckpt Config:\n{old_cfg}")
+    log.debug(f"Ckpt Config:\n{old_cfg.model}")
+
+    log.debug("Create Model.")
+    model = instantiate(old_cfg.model, _convert_="all")
+    checkpointer.model = model
+    checkpointer.reload()
     summary = get_model_summary(model, device=device)
     log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
+
+    # Can override some stuff here.
+    num_slots = model.num_slots if cfg.num_slots is None else cfg.num_slots
+    num_iters = model.num_iters if cfg.num_iters is None else cfg.num_iters
+    ini_iters = model.ini_iters if cfg.ini_iters is None else cfg.ini_iters
+    output_mode = cfg.output
+    log.info(
+        f"Num Slots: {num_slots}\nNum Iters: {num_iters}\nIni Iters: {ini_iters}\nOutput Mode: {output_mode}"
+    )
 
     log.debug("Create Eval Dataloader.")
     dataloader = create_davis_dataloader(cfg, 16)  # Labels not used so put anything.
@@ -123,23 +144,25 @@ def eval(cfg: DictConfig):
 
             t_infer = time()
             pats_t = encoder(ims).to(device)
-            preds_a = attn_weight_method(model.model, pats_t)
-            # preds_b = alpha_mask_method(model, pats_t)
-            # tb_log_preds(writer, f"vid{i}-alpha", preds_b)
-            # Interleave the two predictions for visualization.
-            # preds = torch.stack([i for pair in zip(preds_a, preds_b) for i in pair])
-            # im_paths = [
-            #     i for pair in zip(meta["im_paths"], meta["im_paths"]) for i in pair
-            # ]
+            if output_mode == "slot":
+                preds = attn_weight_method(
+                    model.model, pats_t, num_slots, num_iters, ini_iters
+                )
+                log_label = "attn"
+            elif output_mode == "alpha":
+                preds = alpha_mask_method(
+                    model, pats_t, num_slots, num_iters, ini_iters
+                )
+                log_label = "alpha"
+            else:
+                assert False, f'Output mode "{output_mode}" unsupported!'
             log.debug(f"Inference: {time() - t_infer:.4f} s")
-            im_paths = meta["im_paths"]
-            preds = preds_a
 
             t_save = time()
-            tb_log_preds(writer, f"vid{i}-attn", preds_a)
+            tb_log_preds(writer, f"vid{i}-{log_label}", preds)
             dump_vos_preds(
                 save_dir,
-                im_paths,
+                meta["im_paths"],
                 preds.cpu(),
                 colors,
                 has_palette=has_palette,

@@ -40,7 +40,7 @@ def inverted_scaled_mean_attention(
     m = (
         torch.tensor(0)
         if mask is None
-        else mask.masked_fill(mask.logical_not(), float("-inf"))
+        else mask.float().masked_fill(mask.logical_not(), float("-inf"))
         if mask.dtype == torch.bool
         else mask
     ).type_as(q)

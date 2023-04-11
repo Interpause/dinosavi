@@ -87,6 +87,7 @@ class SlotAttention(nn.Module):
         slots: torch.Tensor = None,
         num_slots: int = 7,
         num_iters: int = 3,
+        mask: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
@@ -95,6 +96,7 @@ class SlotAttention(nn.Module):
             slots (torch.Tensor, optional): BSC slots from previous time step.
             num_slots (int, optional): Number of slots to create. Ignored if ``slots`` is provided.
             num_iters (int, optional): Number of iterations for slots to bind.
+            mask (torch.Tensor, optional): BSN attention mask, where True indicates the element should partake in attention.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
@@ -106,7 +108,7 @@ class SlotAttention(nn.Module):
         # Multiple rounds of attention for slots to bind.
         for _ in range(num_iters):
             q = self.project_q(self.norm_slots(slots))
-            attn, weights = inverted_scaled_mean_attention(q, k, v)
+            attn, weights = inverted_scaled_mean_attention(q, k, v, mask=mask)
             slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)
             slots = slots + self.mlp(self.norm_mlp(slots))  # Residual.
 
@@ -167,18 +169,18 @@ class GroupSlotAttention(SlotAttention):
         slots: torch.Tensor = None,
         num_slots: int = 10,
         num_iters: int = 1,
+        mask: torch.Tensor = None,
         slots_per_group: Sequence[int] = (3, 7),
-        masks: Sequence[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
         Args:
             x (torch.Tensor): BNC input features.
             slots (torch.Tensor, optional): BSC slots from previous time step.
-            num_slots (int, optional): Ignored for GroupSlotAttention.
+            num_slots (int, optional): Use `slots_per_group` instead. Ignored for GroupSlotAttention.
             num_iters (int, optional): Number of iterations for slots to bind.
+            mask (torch.Tensor, optional): BSN attention mask, where True indicates the element should partake in attention.
             slots_per_group (Sequence[int], optional): Number of slots per group.
-            masks (Sequence[torch.Tensor], optional): BSN attention masks for each group, where True indicates the element should partake in attention.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
@@ -197,24 +199,6 @@ class GroupSlotAttention(SlotAttention):
             else slots
         )
 
-        Ms = [None] * self.groups if masks is None else masks
-
-        x = self.norm_in(x)
-        k, v = self.project_k(x), self.project_v(x)
-
-        # Multiple rounds of attention for slots to bind.
-        for _ in range(num_iters):
-            Qs = self.project_q(self.norm_slots(slots)).split(slots_per_group, dim=1)
-
-            attn, weights = [], []
-            for q, m in zip(Qs, Ms):
-                a, w = inverted_scaled_mean_attention(q, k, v, mask=m)
-                attn.append(a)
-                weights.append(w)
-            attn = torch.cat(attn, dim=1)
-            weights = torch.cat(weights, dim=1)
-
-            slots = self.gru(attn.flatten(0, 1), slots.flatten(0, 1)).view_as(slots)
-            slots = slots + self.mlp(self.norm_mlp(slots))  # Residual.
-
-        return slots, weights
+        return super(GroupSlotAttention, self).forward(
+            x, slots=slots, num_slots=num_slots, num_iters=num_iters, mask=mask
+        )

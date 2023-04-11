@@ -103,14 +103,10 @@ def train(cfg: DictConfig):
         if dryrun:
             continue
 
-        video, target = data if isinstance(data, tuple) else (data, None)
-        video = video.to(device)
+        data = data if isinstance(data, tuple) else (data,)
+        data = tuple(d.to(device) for d in data if isinstance(d, torch.Tensor))
 
-        if target is None:
-            loss, debug = model(video)
-        else:
-            target = target.to(device)
-            loss, debug = model(video, target)
+        loss, debug = model(*data)
 
         trainer.update(lr=float(scheduler.get_last_lr()[0]), **debug)
         checkpointer.epoch = ini_epoch + i

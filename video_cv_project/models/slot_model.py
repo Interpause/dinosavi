@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from transformers import ViTConfig
 
-from video_cv_project.models.encoders import SlotAttention
+from video_cv_project.models.encoders import GroupSlotAttention
 from video_cv_project.models.heads import SlotDecoder
 from video_cv_project.utils import gen_2d_pe, mse_loss, tb_viz_slots
 
@@ -76,10 +76,14 @@ class SlotModel(nn.Module):
         self.enc_cfg = enc_cfg
         feat_dim = enc_cfg.hidden_size
 
-        self.attn = SlotAttention(
-            in_feats=feat_dim,
-            slot_dim=slot_dim,
-            hid_dim=slot_hid_dim,
+        # TODO: Use GroupSlotAttention to handle foreground/background.
+        # - Refer to ignore.ipynb on how to use DINO attn to get background mask.
+        # - Convert background mask to background & foreground bitmasks.
+        # - Pass bitmasks to GroupSlotAttention.
+        # - Figure out how to expose the config for slots per group.
+
+        self.attn = GroupSlotAttention(
+            in_feats=feat_dim, slot_dim=slot_dim, hid_dim=slot_hid_dim, groups=0
         )
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
         self.pat_mlp = nn.Linear(feat_dim + 2, feat_dim)  # Linear pos enc so add 2.
@@ -208,7 +212,7 @@ class SlotCPC(nn.Module):
         T, P = len(slots_t), len(self.time_steps)
         h, w = pats_t.shape[-2:]
         x = self._pred_feats(slots_t, (h, w))
-        # Flatten every pixel in batch together for InfoNCE.
+        # Flatten every pixel in batch together for loss.
         x = E.rearrange(x, "(p t b) c h w -> p t (b h w) c", t=T, p=P)
         x = self.layernorm(x)  # Uniformity with ViT.
 

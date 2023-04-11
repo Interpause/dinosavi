@@ -127,6 +127,8 @@ class GroupSlotAttention(SlotAttention):
     ):
         """Initialize Slot Attention Module with slot groups.
 
+        If `groups` is 0, behaviour is the same as normal Slot Attention.
+
         Args:
             in_feats (int): Number of input features.
             slot_dim (int, optional): Size of representations in each slot.
@@ -167,24 +169,27 @@ class GroupSlotAttention(SlotAttention):
         self,
         x: torch.Tensor,
         slots: torch.Tensor = None,
-        num_slots: int = 10,
+        num_slots: int = 5,
         num_iters: int = 1,
         mask: torch.Tensor = None,
-        slots_per_group: Sequence[int] = (3, 7),
+        slots_per_group: Sequence[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
         Args:
             x (torch.Tensor): BNC input features.
             slots (torch.Tensor, optional): BSC slots from previous time step.
-            num_slots (int, optional): Use `slots_per_group` instead. Ignored for GroupSlotAttention.
+            num_slots (int, optional): Ignored if `slots_per_group` is given.
             num_iters (int, optional): Number of iterations for slots to bind.
             mask (torch.Tensor, optional): BSN attention mask, where True indicates the element should partake in attention.
-            slots_per_group (Sequence[int], optional): Number of slots per group.
+            slots_per_group (Sequence[int], optional): Number of slots per group. Defaults to `num_slots` for each group.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
         """
+        slots_per_group = (
+            [num_slots] * self.groups if slots_per_group is None else slots_per_group
+        )
         assert len(slots_per_group) == self.groups
 
         slots = (
@@ -195,7 +200,7 @@ class GroupSlotAttention(SlotAttention):
                 ],
                 dim=1,
             )
-            if slots is None
+            if slots is None and self.groups > 0
             else slots
         )
 

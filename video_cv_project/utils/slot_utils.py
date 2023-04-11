@@ -8,7 +8,13 @@ import torch.nn.functional as F
 
 from .crw_utils import create_crw_target as create_target
 
-__all__ = ["inverted_scaled_mean_attention", "infoNCE_loss", "vicreg_loss", "mse_loss"]
+__all__ = [
+    "inverted_scaled_mean_attention",
+    "bg_from_attn",
+    "infoNCE_loss",
+    "vicreg_loss",
+    "mse_loss",
+]
 
 
 def inverted_scaled_mean_attention(
@@ -37,18 +43,37 @@ def inverted_scaled_mean_attention(
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: *LE attention output, *LS attention weights.
     """
-    m = (
-        torch.tensor(0)
-        if mask is None
-        else mask.float().masked_fill(mask.logical_not(), float("-inf"))
-        if mask.dtype == torch.bool
-        else mask
-    ).type_as(q)
+    m = torch.tensor(0) if mask is None else mask
+    if m.dtype == torch.bool:
+        m = torch.zeros(m.shape).masked_fill(m.logical_not(), float("-inf"))
+    m = m.type_as(q)
 
     w = weight = F.softmax(q @ k.mT / (q.size(-1) ** 0.5) + m, dim=-2)
     w = w / (w.sum(dim=-1, keepdim=True) + eps)
     w = F.dropout(w, dropout_p)
     return w @ v, weight
+
+
+def bg_from_attn(attn: torch.Tensor) -> torch.Tensor:
+    """Return background bitmask, where True indicates background.
+
+    Inspired by FOUND paper: https://arxiv.org/abs/2212.07834
+
+    Args:
+        attn (torch.Tensor): *NHW attentions, where N is each attention head.
+
+    Returns:
+        torch.Tensor: *HW background bitmask.
+    """
+    h, w = attn.shape[-2:]
+    attn = E.rearrange(attn, "... n h w -> ... n (h w)")
+    mean = E.reduce(attn, "... n p -> ... 1 1", "mean")
+    sums = E.reduce(attn > mean, "... n p -> ... n", "sum").clamp(min=1)
+    total = E.reduce(sums, "... n -> ... 1", "sum")
+    weights = (total / sums).log()
+    attn = E.einsum(attn, weights, "... n p, ... n -> ... n p")
+    attn = E.reduce(attn, "... n (h w) -> ... h w", "mean", h=h, w=w)
+    return attn < E.reduce(attn, "... h w -> ... 1 1", "mean")
 
 
 def infoNCE_loss(x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, dict]:

@@ -169,26 +169,24 @@ class GroupSlotAttention(SlotAttention):
         self,
         x: torch.Tensor,
         slots: torch.Tensor = None,
-        num_slots: int = 5,
+        num_slots: Sequence[int] | int = 5,
         num_iters: int = 1,
         mask: torch.Tensor = None,
-        slots_per_group: Sequence[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
         Args:
             x (torch.Tensor): BNC input features.
             slots (torch.Tensor, optional): BSC slots from previous time step.
-            num_slots (int, optional): Ignored if `slots_per_group` is given.
+            num_slots (Sequence[int] | int, optional): Number of slots per group.
             num_iters (int, optional): Number of iterations for slots to bind.
             mask (torch.Tensor, optional): BSN attention mask, where True indicates the element should partake in attention.
-            slots_per_group (Sequence[int], optional): Number of slots per group. Defaults to `num_slots` for each group.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
         """
         slots_per_group = (
-            [num_slots] * self.groups if slots_per_group is None else slots_per_group
+            [num_slots] * self.groups if isinstance(num_slots, int) else num_slots
         )
         assert len(slots_per_group) == self.groups
 
@@ -205,5 +203,9 @@ class GroupSlotAttention(SlotAttention):
         )
 
         return super(GroupSlotAttention, self).forward(
-            x, slots=slots, num_slots=num_slots, num_iters=num_iters, mask=mask
+            x,
+            slots=slots,
+            num_slots=num_slots if isinstance(num_slots, int) else -1,
+            num_iters=num_iters,
+            mask=mask,
         )

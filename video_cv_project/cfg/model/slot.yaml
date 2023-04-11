@@ -1,19 +1,23 @@
 # Config for SlotCPC model.
 
 time_steps: 0
-num_slots: 7
+num_slots: 10
 num_iters: 1
 ini_iters: 1
+split_bg: false
+bg_mask_strategy: initial
+
 _target_: video_cv_project.models.SlotCPC
 model:
   _target_: video_cv_project.models.SlotModel
-  add_pe: false
-  slot_dim: 512 # 1024
-  slot_hid_dim: 512 # 1024
+  slot_dim: 512 # 256
+  slot_hid_dim: 2048 # 1024
   # Since these handle interactions between slots & predicts the next time step,
   # each head could theoretically handle a different aspect to update. For example,
   # changes in apperance, position, visibility, etc.
-  slot_predict_heads: 4 # 8
+  slot_predict_heads: 4
+  split_bg: ${..split_bg}
+  add_pe: false
   enc_cfg:
     _target_: transformers.ViTConfig.from_pretrained
     pretrained_model_name_or_path: ${vit_path}
@@ -24,9 +28,9 @@ decoder:
   # TODO: Can be auto-detected or read from model.encoder metadata, just no nice
   # way to pass to the decoder init.
   out_dim: 384
-  depth: 2
-  kernel_size: [3, 3]
-  hid_dim: 512
+  depth: 4
+  kernel_size: 1
+  hid_dim: 1024
   pe_type: linear
   # Decoder handles positional encoding interpolation.
   pe_size: [28, 28]

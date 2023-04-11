@@ -9,7 +9,7 @@ from transformers import ViTConfig
 
 from video_cv_project.models.encoders import GroupSlotAttention
 from video_cv_project.models.heads import SlotDecoder
-from video_cv_project.utils import gen_2d_pe, mse_loss, tb_viz_slots
+from video_cv_project.utils import gen_2d_pe, mse_loss, bg_from_attn, tb_viz_slots
 
 __all__ = ["SlotModel", "SlotCPC"]
 
@@ -54,10 +54,11 @@ class SlotModel(nn.Module):
     def __init__(
         self,
         enc_cfg: ViTConfig,
-        add_pe: bool = False,
         slot_dim: int = 512,
         slot_hid_dim: int = 768,
         slot_predict_heads: int = 4,
+        split_bg: bool = False,
+        add_pe: bool = False,
     ):
         """Initialize SlotModel.
 
@@ -66,29 +67,28 @@ class SlotModel(nn.Module):
 
         Args:
             enc_cfg (ViTConfig): Config of ViT used to encode frames.
-            add_pe (bool, optional): Add extra positional encoding to patches.
             slot_dim (int, optional): Size of each slot. Defaults to 512.
             slot_hid_dim (int, optional): Size of hidden layer in `SlotAttention`. Defaults to 768.
             slot_predict_heads (int, optional): Number of attention heads in `SlotPredictor`. Defaults to 4.
+            split_bg (bool, optional): Use separate set of slots for background versus foreground.
+            add_pe (bool, optional): Add extra positional encoding to patches.
         """
         super(SlotModel, self).__init__()
 
         self.enc_cfg = enc_cfg
         feat_dim = enc_cfg.hidden_size
 
-        # TODO: Use GroupSlotAttention to handle foreground/background.
-        # - Refer to ignore.ipynb on how to use DINO attn to get background mask.
-        # - Convert background mask to background & foreground bitmasks.
-        # - Pass bitmasks to GroupSlotAttention.
-        # - Figure out how to expose the config for slots per group.
-
         self.attn = GroupSlotAttention(
-            in_feats=feat_dim, slot_dim=slot_dim, hid_dim=slot_hid_dim, groups=0
+            in_feats=feat_dim,
+            slot_dim=slot_dim,
+            hid_dim=slot_hid_dim,
+            groups=2 if split_bg else 0,
         )
         self.predictor = SlotPredictor(slot_dim=slot_dim, num_heads=slot_predict_heads)
         self.pat_mlp = nn.Linear(feat_dim + 2, feat_dim)  # Linear pos enc so add 2.
 
         self.add_pe = add_pe
+        self.split_bg = split_bg
         self.slot_dim = slot_dim
         self.slot_hid_dim = slot_hid_dim
         self.feat_dim = feat_dim
@@ -110,16 +110,18 @@ class SlotModel(nn.Module):
         self,
         pats: torch.Tensor,
         slots: torch.Tensor = None,
-        num_slots: int = 7,
+        num_slots: Sequence[int] | int = 7,
         num_iters: int = 3,
+        mask: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
 
         Args:
             pats (torch.Tensor): BCHW features.
             slots (torch.Tensor, optional): BSC slots.
-            num_slots (int, optional): Number of slots to create.
+            num_slots (Sequence[int] | int, optional): Number of slots to create.
             num_iters (int, optional): Number of iterations to run.
+            mask (torch.Tensor, optional): BSN attention mask, where True indicates the element should partake in attention.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
@@ -131,9 +133,7 @@ class SlotModel(nn.Module):
             slots = self.predictor(slots)
 
         # Bind slots to features.
-        slots, weights = self.attn(
-            x, slots=slots, num_slots=num_slots, num_iters=num_iters
-        )
+        slots, weights = self.attn.forward(x, slots, num_slots, num_iters, mask)
         return slots, weights
 
 
@@ -145,9 +145,11 @@ class SlotCPC(nn.Module):
         model: SlotModel,
         decoder: SlotDecoder,
         time_steps: Sequence[int] | int = 2,
-        num_slots: int = 7,
+        num_slots: Tuple[int, int] | int = 5,
         num_iters: int = 3,
         ini_iters: int = None,
+        split_bg: bool = False,
+        bg_mask_strategy: str = "initial",
     ):
         """Initialize SlotCPC.
 
@@ -155,11 +157,19 @@ class SlotCPC(nn.Module):
             model (SlotModel): Slot model.
             decoder (SlotDecoder): Decodes slot to features.
             time_steps (Sequence[int] | int, optional): Up to which time step to predict to. Defaults to 2.
-            num_slots (int, optional): Number of slots to create. Defaults to 7.
+            num_slots (Tuple[int, int] | int, optional): Number of slots to create. Defaults to 7.
+                If tuple, should be (background, foreground).
             num_iters (int, optional): Number of iterations for slots to bind. Defaults to 3.
             ini_iters (int, optional): Number of iterations for slots to bind when first initialized. Defaults to `num_iters`.
+            split_bg (bool, optional): Use separate set of slots for background versus foreground.
+            bg_mask_strategy (str, optional): Either "initial" or "always".
         """
         super(SlotCPC, self).__init__()
+
+        self.split_bg = split_bg
+        self.bg_mask_strategy = bg_mask_strategy
+        assert model.split_bg == self.split_bg
+        assert self.split_bg or isinstance(num_slots, int)
 
         self.model = model
         self.decoder = decoder
@@ -171,20 +181,43 @@ class SlotCPC(nn.Module):
             for _ in range(len(self.time_steps))
         )
         self.layernorm = nn.LayerNorm(model.feat_dim)
-        self.num_slots = num_slots
+        self.num_slots = (
+            (num_slots, num_slots) if isinstance(num_slots, int) else num_slots
+        )
         self.num_iters = num_iters
         self.ini_iters = num_iters if ini_iters is None else ini_iters
 
         self.is_trace = False
 
-    def _prop_slots(self, pats: torch.Tensor):
+    def _prop_slots(self, pats: torch.Tensor, masks: torch.Tensor):
         """Propagate slots forward in time."""
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
         s, slots_t, attn_t = None, [], []
         T, i = len(pats) - max(self.time_steps), self.ini_iters
-        for p in pats[:T]:
-            # TODO: Might intermediate attention masks be useful for something?
-            s, w = self.model.forward(p, s, self.num_slots, i)
+        pats, masks = pats[:T], masks[:T]
+
+        if self.split_bg:
+            bg, fg = self.num_slots
+            masks = bg_from_attn(masks)
+            masks = torch.cat(
+                [
+                    E.repeat(masks, "t b h w -> t b s (h w)", s=bg),
+                    E.repeat(masks.logical_not(), "t b h w -> t b s (h w)", s=fg),
+                ],
+                dim=-2,
+            )
+
+            if self.bg_mask_strategy == "initial":
+                masks[1:] = True
+            elif self.bg_mask_strategy == "always":
+                pass
+            else:
+                assert False, f"Invalid bg mask strategy: {self.bg_mask_strategy}"
+
+        for p, m in zip(pats, masks):
+            s, w = self.model.forward(
+                p, s, self.num_slots, i, m if self.split_bg else None
+            )
             slots_t.append(s)
             attn_t.append(w)
             i = self.num_iters
@@ -209,7 +242,8 @@ class SlotCPC(nn.Module):
             Tuple[torch.Tensor, dict]: Loss, metrics.
         """
         pats_t = E.rearrange(vid, "b t c h w -> t b c h w")
-        slots_t, attn_t = self._prop_slots(pats_t)
+        masks_t = E.rearrange(cls_attns, "b t n h w -> t b n h w")
+        slots_t, attn_t = self._prop_slots(pats_t, masks_t)
 
         # Predict future time steps simultaneously.
         T, P = len(slots_t), len(self.time_steps)

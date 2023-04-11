@@ -225,19 +225,22 @@ class PatchAndViT(nn.Module):
         #     self.enc.eval()  # Compile resets eval for some reason.
 
     @torch.inference_mode()
-    def __call__(self, ims: torch.Tensor) -> torch.Tensor:
+    def __call__(self, ims: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Split TCHW images into patches and encode using ViT.
 
         Args:
             ims (torch.Tensor): TCHW images.
 
         Returns:
-            torch.Tensor: TCHW latent patches.
+            Tuple[torch.Tensor, torch.Tensor]: TCHW latent patches, TNHW CLS token attention weights per head N.
         """
         ori_device = ims.device
         key, cached = self.cache.get_vid(ims)
         if cached is not None:
-            return cached[CACHE_PATCHES].to(ori_device)
+            return (
+                cached[CACHE_PATCHES].to(ori_device),
+                cached[CACHE_LAST_ATTNS].to(ori_device),
+            )
 
         self._compile()
         ims = ims.requires_grad_(False)
@@ -280,7 +283,7 @@ class PatchAndViT(nn.Module):
         attns = output.attentions[-1]
         attns = E.rearrange(attns, "t n (h w) -> t n h w", h=h, w=w)
         self.cache.put_vid(key, {CACHE_PATCHES: pats, CACHE_LAST_ATTNS: attns})
-        return pats.to(ori_device)
+        return pats.to(ori_device), attns.to(ori_device)
 
     def __repr__(self):
         """Return string representation of class."""

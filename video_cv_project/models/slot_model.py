@@ -196,11 +196,14 @@ class SlotCPC(nn.Module):
         preds = E.rearrange(preds_p, "p t b s c -> (p t b) s c")
         return self.decoder(preds, sz)  # (PTB)CHW
 
-    def forward(self, vid: torch.Tensor) -> Tuple[torch.Tensor, dict]:
+    def forward(
+        self, vid: torch.Tensor, cls_attns: torch.Tensor
+    ) -> Tuple[torch.Tensor, dict]:
         """Forward pass.
 
         Args:
             vid (torch.Tensor): BTCHW image patches.
+            cls_attns (torch.Tensor): BTNHW CLS token attention weights.
 
         Returns:
             Tuple[torch.Tensor, dict]: Loss, metrics.

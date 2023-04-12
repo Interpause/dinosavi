@@ -6,6 +6,7 @@ num_iters: 1
 ini_iters: 1
 split_bg: false
 bg_mask_strategy: initial
+time_predict: linear
 
 _target_: video_cv_project.models.SlotCPC
 model:

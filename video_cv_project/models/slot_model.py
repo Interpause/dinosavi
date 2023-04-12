@@ -91,6 +91,7 @@ class SlotModel(nn.Module):
         self.split_bg = split_bg
         self.slot_dim = slot_dim
         self.slot_hid_dim = slot_hid_dim
+        self.slot_predict_heads = slot_predict_heads
         self.feat_dim = feat_dim
 
     def _proc_feats(self, pats: torch.Tensor) -> torch.Tensor:
@@ -150,6 +151,7 @@ class SlotCPC(nn.Module):
         ini_iters: int = None,
         split_bg: bool = False,
         bg_mask_strategy: str = "initial",
+        time_predict: str = "linear",
     ):
         """Initialize SlotCPC.
 
@@ -163,6 +165,7 @@ class SlotCPC(nn.Module):
             ini_iters (int, optional): Number of iterations for slots to bind when first initialized. Defaults to `num_iters`.
             split_bg (bool, optional): Use separate set of slots for background versus foreground.
             bg_mask_strategy (str, optional): Either "initial" or "always".
+            time_predict (str, optional): Either "linear" or "attn".
         """
         super(SlotCPC, self).__init__()
 
@@ -176,10 +179,24 @@ class SlotCPC(nn.Module):
         self.time_steps = (
             list(range(time_steps + 1)) if isinstance(time_steps, int) else time_steps
         )
-        self.time_mlp = nn.ModuleList(
-            nn.Linear(model.slot_dim, model.slot_dim)
-            for _ in range(len(self.time_steps))
-        )
+
+        self.time_predict = time_predict
+        if time_predict == "linear":
+            self.time_mlp = nn.ModuleList(
+                nn.Linear(model.slot_dim, model.slot_dim)
+                for _ in range(len(self.time_steps))
+            )
+        elif time_predict == "attn":
+            self.time_attn = nn.ModuleList(
+                # TODO: Separate config for number of heads here.
+                nn.MultiheadAttention(
+                    model.slot_dim, model.slot_predict_heads, batch_first=True
+                )
+                for _ in range(len(self.time_steps))
+            )
+        else:
+            assert False, f"Unsupported time predictor: {time_predict}"
+
         self.layernorm = nn.LayerNorm(model.feat_dim)
         self.num_slots = num_slots
         self.num_iters = num_iters
@@ -224,7 +241,10 @@ class SlotCPC(nn.Module):
 
     def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Predict future features from slots."""
-        preds_p = [l(slots) for l in self.time_mlp]
+        if self.time_predict == "linear":
+            preds_p = [l(slots) for l in self.time_mlp]
+        elif self.time_predict == "attn":
+            preds_p = [l(slots, slots, slots)[0] for l in self.time_attn]
         preds = E.rearrange(preds_p, "p t b s c -> (p t b) s c")
         return self.decoder(preds, sz)  # (PTB)CHW
 

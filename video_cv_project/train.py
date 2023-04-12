@@ -103,8 +103,9 @@ def train(cfg: DictConfig):
         if dryrun:
             continue
 
-        data = data if isinstance(data, tuple) else (data,)
-        data = tuple(d.to(device) for d in data if isinstance(d, torch.Tensor))
+        # `default_collate` turns tuples into lists for some reason.
+        data = data if isinstance(data, list) or isinstance(data, tuple) else (data,)
+        data = tuple(d.to(device) if isinstance(d, torch.Tensor) else d for d in data)
 
         loss, debug = model(*data)
 

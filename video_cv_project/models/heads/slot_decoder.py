@@ -130,7 +130,7 @@ class AlphaSlotDecoder(SlotDecoder):
         Returns:
             torch.Tensor: BSHW alpha masks for each slot.
         """
-        return self.forward(x, sz, ret_alpha=True)
+        return self.__call__(x, sz, ret_alpha=True)
 
     def forward(
         self, x: torch.Tensor, sz: Tuple[int, int], ret_alpha: bool = False

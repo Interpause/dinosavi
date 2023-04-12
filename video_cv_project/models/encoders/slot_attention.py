@@ -188,7 +188,7 @@ class GroupSlotAttention(SlotAttention):
         slots_per_group = (
             [num_slots] * self.groups if isinstance(num_slots, int) else num_slots
         )
-        assert len(slots_per_group) == self.groups
+        assert self.groups < 1 or len(slots_per_group) == self.groups
 
         slots = (
             torch.cat(
@@ -205,6 +205,7 @@ class GroupSlotAttention(SlotAttention):
         return super(GroupSlotAttention, self).forward(
             x,
             slots=slots,
+            # If `num_slots` is tuple, slots should already be initialized.
             num_slots=num_slots if isinstance(num_slots, int) else -1,
             num_iters=num_iters,
             mask=mask,

@@ -64,12 +64,13 @@ def get_model_summary(model, sizes=SIZES, device=None):
     """Get model summary."""
     from torchinfo import summary
 
+    exc = None
     for size in sizes:
         try:
             model_summary = summary(model, size, verbose=0, col_width=20, device=device)
         except Exception as e:
-            # raise e
+            exc = e
             continue
         model_summary.formatting.layer_name_width = 30
         return model_summary
-    assert False, "No supported size!"
+    raise exc

@@ -133,7 +133,7 @@ class SlotModel(nn.Module):
             slots = self.predictor(slots)
 
         # Bind slots to features.
-        slots, weights = self.attn.forward(x, slots, num_slots, num_iters, mask)
+        slots, weights = self.attn(x, slots, num_slots, num_iters, mask)
         return slots, weights
 
 
@@ -181,9 +181,7 @@ class SlotCPC(nn.Module):
             for _ in range(len(self.time_steps))
         )
         self.layernorm = nn.LayerNorm(model.feat_dim)
-        self.num_slots = (
-            (num_slots, num_slots) if isinstance(num_slots, int) else num_slots
-        )
+        self.num_slots = num_slots
         self.num_iters = num_iters
         self.ini_iters = num_iters if ini_iters is None else ini_iters
 
@@ -194,11 +192,14 @@ class SlotCPC(nn.Module):
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
         s, slots_t, attn_t = None, [], []
         T, i = len(pats) - max(self.time_steps), self.ini_iters
-        pats, masks = pats[:T], masks[:T]
 
         if self.split_bg:
-            bg, fg = self.num_slots
-            masks = bg_from_attn(masks)
+            bg, fg = (
+                [self.num_slots] * 2
+                if isinstance(self.num_slots, int)
+                else self.num_slots
+            )
+            masks = bg_from_attn(masks[:T])
             masks = torch.cat(
                 [
                     E.repeat(masks, "t b h w -> t b s (h w)", s=bg),
@@ -214,10 +215,8 @@ class SlotCPC(nn.Module):
             else:
                 assert False, f"Invalid bg mask strategy: {self.bg_mask_strategy}"
 
-        for p, m in zip(pats, masks):
-            s, w = self.model.forward(
-                p, s, self.num_slots, i, m if self.split_bg else None
-            )
+        for p, m in zip(pats[:T], masks[:T]):
+            s, w = self.model(p, s, self.num_slots, i, m if self.split_bg else None)
             slots_t.append(s)
             attn_t.append(w)
             i = self.num_iters
@@ -230,20 +229,24 @@ class SlotCPC(nn.Module):
         return self.decoder(preds, sz)  # (PTB)CHW
 
     def forward(
-        self, vid: torch.Tensor, cls_attns: torch.Tensor
+        self, vid: torch.Tensor, cls_attns: torch.Tensor = None
     ) -> Tuple[torch.Tensor, dict]:
         """Forward pass.
 
         Args:
             vid (torch.Tensor): BTCHW image patches.
-            cls_attns (torch.Tensor): BTNHW CLS token attention weights.
+            cls_attns (torch.Tensor, optional): BTNHW CLS token attention weights.
 
         Returns:
             Tuple[torch.Tensor, dict]: Loss, metrics.
         """
         pats_t = E.rearrange(vid, "b t c h w -> t b c h w")
-        masks_t = E.rearrange(cls_attns, "b t n h w -> t b n h w")
-        slots_t, attn_t = self._prop_slots(pats_t, masks_t)
+        masks_t = (
+            [None] * len(pats_t)
+            if cls_attns is None
+            else E.rearrange(cls_attns, "b t n h w -> t b n h w")  # type: ignore
+        )
+        slots_t, attn_t = self._prop_slots(pats_t, masks_t)  # type: ignore
 
         # Predict future time steps simultaneously.
         T, P = len(slots_t), len(self.time_steps)

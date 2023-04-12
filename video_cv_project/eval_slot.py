@@ -36,7 +36,7 @@ def attn_weight_method(
     weights: List[torch.Tensor] = []
     i = ini_iters
     for p in pats_t:
-        s, attn = model.forward(p, s, num_slots, i)
+        s, attn = model(p, s, num_slots, i)
         weights.append(attn)
         i = num_iters
     preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
@@ -58,7 +58,7 @@ def alpha_mask_method(
     slots = []
     i = ini_iters
     for p in pats_t:
-        s, _ = model.model.forward(p, s, num_slots, i)
+        s, _ = model.model(p, s, num_slots, i)
         slots.append(s)
         i = num_iters
     slots_t = torch.stack(slots)

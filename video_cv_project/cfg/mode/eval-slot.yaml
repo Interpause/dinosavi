@@ -20,7 +20,11 @@ ini_iters:
 output: slot # alpha
 
 # Whether to use lock-on.
-lock_on: false
+lock_on: true
+# [Lock on only] Slots per class.
+slots_per_class: 1
+# [Lock on only] Number of slots to use for background.
+num_bg_slots: 8
 
 data:
   dataset:

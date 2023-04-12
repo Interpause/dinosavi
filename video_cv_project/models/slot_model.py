@@ -121,7 +121,7 @@ class SlotModel(nn.Module):
             slots (torch.Tensor, optional): BSC slots.
             num_slots (Sequence[int] | int, optional): Number of slots to create.
             num_iters (int, optional): Number of iterations to run.
-            mask (torch.Tensor, optional): BSN attention mask, where True indicates the element should partake in attention.
+            mask (torch.Tensor, optional): BSN attention bitmask, where True indicates the element should partake in attention.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.

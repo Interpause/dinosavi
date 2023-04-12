@@ -9,6 +9,7 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
+import torch.nn.functional as F
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
@@ -28,6 +29,7 @@ def attn_weight_method(
     num_slots: int = 7,
     num_iters: int = 1,
     ini_iters: int = 1,
+    lbl: torch.Tensor = None,
 ):
     """Use Slot Attention weights as labels."""
     s = None
@@ -35,10 +37,13 @@ def attn_weight_method(
     pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
     weights: List[torch.Tensor] = []
     i = ini_iters
+    m = None if lbl is None else E.rearrange(lbl, "1 s h w -> 1 s (h w)")
     for p in pats_t:
-        s, attn = model(p, s, num_slots, i)
+        s, attn = model(p, s, num_slots, i, m)
         weights.append(attn)
-        i = num_iters
+
+        # Reset initial frame only things.
+        i, m = num_iters, None
     preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
     return preds
 
@@ -49,6 +54,7 @@ def alpha_mask_method(
     num_slots: int = 7,
     num_iters: int = 1,
     ini_iters: int = 1,
+    lbl: torch.Tensor = None,
 ):
     """Use AlphaSlotDecoder alpha masks as labels."""
     s = None
@@ -57,10 +63,13 @@ def alpha_mask_method(
     decoder: AlphaSlotDecoder = model.decoder  # type: ignore
     slots = []
     i = ini_iters
+    m = None if lbl is None else E.rearrange(lbl, "1 s h w -> 1 s (h w)")
     for p in pats_t:
-        s, _ = model.model(p, s, num_slots, i)
+        s, _ = model.model(p, s, num_slots, i, m)
         slots.append(s)
-        i = num_iters
+
+        # Reset initial frame only things.
+        i, m = num_iters, None
     slots_t = torch.stack(slots)
     preds = model.time_mlp[0](slots_t)
     # TODO: add batching here.
@@ -104,12 +113,19 @@ def eval(cfg: DictConfig):
     num_iters = model.num_iters if cfg.num_iters is None else cfg.num_iters
     ini_iters = model.ini_iters if cfg.ini_iters is None else cfg.ini_iters
     output_mode = cfg.output
+    lock_on = cfg.lock_on
+
     log.info(
-        f"Num Slots: {num_slots}\nNum Iters: {num_iters}\nIni Iters: {ini_iters}\nOutput Mode: {output_mode}"
+        f"""Num Slots: {"Lock On" if lock_on else num_slots}
+Num Iters: {num_iters}
+Ini Iters: {ini_iters}
+Output Mode: {output_mode}
+Lock On: {lock_on}
+        """
     )
 
     log.debug("Create Eval Dataloader.")
-    dataloader = create_davis_dataloader(cfg, 16)  # Labels not used so put anything.
+    dataloader = create_davis_dataloader(cfg, 1)
 
     log.debug("Create Encoder.")
     encoder = instantiate(cfg.data.transform.patch_func)
@@ -130,7 +146,7 @@ def eval(cfg: DictConfig):
 
     with torch.inference_mode():
         t_data, t_infer, t_save = time(), 0.0, 0.0
-        for i, (ims, _, colors, meta) in enumerate(dataloader):
+        for i, (ims, lbls, colors, meta) in enumerate(dataloader):
             T = len(ims)
 
             # Prepended frames are inferred on & contribute to run time.
@@ -141,18 +157,34 @@ def eval(cfg: DictConfig):
 
             save_dir = out_dir / "results"
 
-            colors[0] = torch.Tensor([191, 128, 64])  # Temporary for visualization.
+            # If lock on is used, override number of slots to match labels.
+            lbl = None
+            if lock_on:
+                lbl = lbls[:1]
+                if isinstance(num_slots, tuple):
+                    # TODO: How to map multiple background slots to same class id?
+                    # NOTE: Coincidence that class id 0, which corresponds to slot 0
+                    # aka the only background slot below, is the label for background.
+                    num_slots = (1, lbl.shape[1] - 1)
+                else:
+                    num_slots = lbl.shape[1]
+            else:
+                # Was black which is hard to see.
+                colors[0] = torch.Tensor([191, 128, 64])
 
             t_infer = time()
-            pats_t = encoder(ims).to(device)
+            pats_t, _ = encoder(ims)
+            pats_t = pats_t.to(device)
+            if lbl is not None:
+                lbl = F.interpolate(lbl, pats_t.shape[-2:]).to(device)
             if output_mode == "slot":
                 preds = attn_weight_method(
-                    model.model, pats_t, num_slots, num_iters, ini_iters
+                    model.model, pats_t, num_slots, num_iters, ini_iters, lbl
                 )
                 log_label = "attn"
             elif output_mode == "alpha":
                 preds = alpha_mask_method(
-                    model, pats_t, num_slots, num_iters, ini_iters
+                    model, pats_t, num_slots, num_iters, ini_iters, lbl
                 )
                 log_label = "alpha"
             else:

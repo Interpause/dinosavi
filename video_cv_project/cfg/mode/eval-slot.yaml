@@ -19,6 +19,9 @@ ini_iters:
 # - alpha: Alpha mask from Decoder.
 output: slot # alpha
 
+# Whether to use lock-on.
+lock_on: false
+
 data:
   dataset:
     context_len: 0

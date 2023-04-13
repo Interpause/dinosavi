@@ -14,7 +14,7 @@ from transformers import ViTModel
 
 from video_cv_project.cfg import BEST_DEVICE, CACHE_LAST_ATTNS, CACHE_PATCHES
 from video_cv_project.data import create_kinetics_dataloader
-from video_cv_project.engine import Trainer
+from video_cv_project.engine import ExpRunner
 from video_cv_project.utils import hash_model
 
 log = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def max_compile(model: ViTModel, batch_size: int, device: torch.device) -> ViTMo
     before = model(x2)[0]
     model = torch.jit.trace(model, x1, check_trace=False)
     model = torch.jit.optimize_for_inference(model)
-    # model = torch.compile(model, mode="max-autotune", fullgraph=True)  # type: ignore
+    # model = torch.compile(model, mode="max-autotune", fullgraph=True)
     after = model(x2)[0]
     log.info(f"Compile Max Diff: {abs(after-before).max()}")
     return model
@@ -70,7 +70,7 @@ def cache(cfg: DictConfig):
         cfg.total_steps = len(dataloader) * epochs
     log.info(f"Total Steps: {cfg.total_steps}")
 
-    trainer = Trainer(
+    runner = ExpRunner(
         dataloader, epochs, logger=log, log_every=log_every, save_every=-1
     )
 
@@ -88,7 +88,7 @@ def cache(cfg: DictConfig):
     # otherwise same images (like complete black).
     queue: Dict[str, torch.Tensor] = {}
     with PoolExecutor(max_workers=num_writers) as pool:
-        for i, n, video in trainer:
+        for i, n, video in runner:
             for v in video:
                 queue.update(v)
 

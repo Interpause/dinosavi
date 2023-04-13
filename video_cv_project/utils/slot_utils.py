@@ -11,6 +11,7 @@ from .crw_utils import create_crw_target as create_target
 __all__ = [
     "inverted_scaled_mean_attention",
     "bg_from_attn",
+    "calc_slot_masks",
     "infoNCE_loss",
     "vicreg_loss",
     "mse_loss",
@@ -78,6 +79,36 @@ def bg_from_attn(attn: torch.Tensor) -> torch.Tensor:
     attn = E.einsum(attn, weights, "... n p, ... n -> ... n p")
     attn = E.reduce(attn, "... n (h w) -> ... h w", "mean", h=h, w=w)
     return attn < E.reduce(attn, "... h w -> ... 1 1", "mean")
+
+
+def calc_slot_masks(
+    mask: torch.Tensor, bg: int, fg: int, strategy: str = "always"
+) -> torch.Tensor:
+    """Calculate per slot bitmasks from background bitmask.
+
+    Args:
+        mask (torch.Tensor): TBHW background bitmask, where True indicates background.
+        bg (int): Number of background slots.
+        fg (int): Number of foreground slots.
+        strategy (str, optional): Either "initial" or "always". Defaults to "always".
+
+    Returns:
+        torch.Tensor: TBSN slot bitmasks.
+    """
+    masks = torch.cat(
+        [
+            E.repeat(mask, "t b h w -> t b s (h w)", s=bg),
+            E.repeat(mask.logical_not(), "t b h w -> t b s (h w)", s=fg),
+        ],
+        dim=-2,
+    )
+    if strategy == "initial":
+        masks[1:] = True
+    elif strategy == "always":
+        pass
+    else:
+        assert False, f"Invalid strategy: {strategy}"
+    return masks
 
 
 def infoNCE_loss(x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, dict]:

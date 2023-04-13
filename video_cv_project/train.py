@@ -8,7 +8,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import create_kinetics_dataloader
-from video_cv_project.engine import Checkpointer, Trainer
+from video_cv_project.engine import Checkpointer, ExpRunner
 from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
 log = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ def train(cfg: DictConfig):
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
         log.info(f"Ckpt Config:\n{OmegaConf.to_object(old_cfg)}")
 
-    trainer = Trainer(
+    runner = ExpRunner(
         dataloader,
         epochs,
         logger=log,
@@ -92,15 +92,15 @@ def train(cfg: DictConfig):
         save_every=save_every,
     )
     # model.is_trace = True
-    # trainer.tbwriter.add_graph(model.model, torch.zeros(1, 3, 224, 224).to(device))
+    # runner.tbwriter.add_graph(model.model, torch.zeros(1, 3, 224, 224).to(device))
     # model.is_trace = False
-    # trainer.tbwriter.add_hparams(tb_hparams(cfg), {})
+    # runner.tbwriter.add_hparams(tb_hparams(cfg), {})
 
     model.to(device).train()
 
     ini_epoch = checkpointer.epoch
     log.info(f"Start training for {epochs} epochs.")
-    for i, n, data in trainer:
+    for i, n, data in runner:
         if dryrun:
             continue
 
@@ -110,7 +110,7 @@ def train(cfg: DictConfig):
 
         loss, debug = model(*data)
 
-        trainer.update(lr=float(scheduler.get_last_lr()[0]), **debug)
+        runner.update(lr=float(scheduler.get_last_lr()[0]), **debug)
         checkpointer.epoch = ini_epoch + i
 
         optimizer.zero_grad()

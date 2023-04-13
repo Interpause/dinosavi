@@ -10,14 +10,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 from video_cv_project.utils import confirm_ask, iter_pbar
 
-__all__ = ["Trainer"]
+__all__ = ["ExpRunner"]
 
 log = logging.getLogger(__name__)
 
 TENSORBOARD_DIR = "."
 
 
-class Trainer:
+class ExpRunner:
     """Handles iterating dataloader and logging."""
 
     def __init__(
@@ -30,7 +30,7 @@ class Trainer:
         save_func=lambda i, n: None,
         save_every: int = 500,
     ):
-        """Initialize Trainer."""
+        """Initialize ExpRunner."""
         self.dataloader = dataloader
         self.epochs = epochs
         self.pbar = pbar

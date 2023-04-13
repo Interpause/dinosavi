@@ -1,37 +1,38 @@
-# Config for SlotCPC model.
+# Config for SlotTrainer.
 
 time_steps: 0
 num_slots: 10
 num_iters: 1
 ini_iters: 1
-split_bg: false
-bg_mask_strategy: initial
-time_predict: linear
+use_bgfg_groups: false
+bgfg_strategy: always
+time_decoder: attn
 
-_target_: video_cv_project.models.SlotCPC
+_target_: video_cv_project.models.SlotTrainer
 model:
   _target_: video_cv_project.models.SlotModel
-  slot_dim: 512 # 256
-  slot_hid_dim: 2048 # 1024
-  # Since these handle interactions between slots & predicts the next time step,
-  # each head could theoretically handle a different aspect to update. For example,
-  # changes in apperance, position, visibility, etc.
-  slot_predict_heads: 4
-  split_bg: ${..split_bg}
-  add_pe: false
+  slot_dim: 512
+  slot_hid_dim: 2048
+  use_bgfg_groups: ${..use_bgfg_groups}
   enc_cfg:
     _target_: transformers.ViTConfig.from_pretrained
     pretrained_model_name_or_path: ${vit_path}
+  slot_predictor:
+    _target_: video_cv_project.models.SAViSlotPredictor
+    slot_dim: ${..slot_dim}
+    # Since these handle interactions between slots & predicts the next time step,
+    # each head could theoretically handle a different aspect to update. For example,
+    # changes in apperance, position, visibility, etc.
+    num_heads: 4
+
 decoder:
   _target_: video_cv_project.models.heads.AlphaSlotDecoder
   slot_dim: ${..model.slot_dim}
   # Should match dims of model.encoder's output feature map.
-  # TODO: Can be auto-detected or read from model.encoder metadata, just no nice
-  # way to pass to the decoder init.
   out_dim: 384
   depth: 4
   kernel_size: 1
   hid_dim: 1024
-  pe_type: linear
+  pe_type: learnt
   # Decoder handles positional encoding interpolation.
   pe_size: [28, 28]

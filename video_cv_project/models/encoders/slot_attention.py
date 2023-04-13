@@ -7,7 +7,7 @@ Some modifications were made, namely:
 - Uses `F.scaled_dot_product_attention` for more performance.
 """
 
-from typing import Tuple, Sequence
+from typing import Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -123,27 +123,29 @@ class GroupSlotAttention(SlotAttention):
         in_feats: int,
         slot_dim: int = 128,
         hid_dim: int = 512,
-        groups: int = 2,
+        num_groups: int = 2,
     ):
         """Initialize Slot Attention Module with slot groups.
 
-        If `groups` is 0, behaviour is the same as normal Slot Attention.
+        If `num_groups` is 0, behaviour is the same as normal Slot Attention.
 
         Args:
             in_feats (int): Number of input features.
             slot_dim (int, optional): Size of representations in each slot.
             hid_dim (int, optional): Size of hidden layer in MLP.
-            groups (int, optional): Number of slot groups.
+            num_groups (int, optional): Number of slot groups.
         """
         super(GroupSlotAttention, self).__init__(in_feats, slot_dim, hid_dim)
-        self.groups = groups
+        self.num_groups = num_groups
 
         # Parameters for groups are added to slot initialization distribution.
         self.groups_mu = nn.ParameterList(
-            nn.init.xavier_uniform_(torch.empty(1, 1, slot_dim)) for _ in range(groups)
+            nn.init.xavier_uniform_(torch.empty(1, 1, slot_dim))
+            for _ in range(num_groups)
         )
         self.groups_logvar = nn.ParameterList(
-            nn.init.xavier_uniform_(torch.empty(1, 1, slot_dim)) for _ in range(groups)
+            nn.init.xavier_uniform_(torch.empty(1, 1, slot_dim))
+            for _ in range(num_groups)
         )
 
     def _init_group_slots(
@@ -186,9 +188,9 @@ class GroupSlotAttention(SlotAttention):
             Tuple[torch.Tensor, torch.Tensor]: BSC slots, BSN attention weights.
         """
         slots_per_group = (
-            [num_slots] * self.groups if isinstance(num_slots, int) else num_slots
+            [num_slots] * self.num_groups if isinstance(num_slots, int) else num_slots
         )
-        assert self.groups < 1 or len(slots_per_group) == self.groups
+        assert self.num_groups < 1 or len(slots_per_group) == self.num_groups
 
         slots = (
             torch.cat(
@@ -198,7 +200,7 @@ class GroupSlotAttention(SlotAttention):
                 ],
                 dim=1,
             )
-            if slots is None and self.groups > 0
+            if slots is None and self.num_groups > 0
             else slots
         )
 

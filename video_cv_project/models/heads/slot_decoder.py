@@ -32,6 +32,7 @@ class SpatialBroadcast(nn.Module):
         """
         super(SpatialBroadcast, self).__init__()
 
+        pe_size = tuple(pe_size)  # Config system might pass unhashable list.
         if pe_type == "learnt":
             self.pe = nn.Parameter(
                 nn.init.xavier_uniform_(torch.empty(pe_dim, *pe_size))
@@ -59,11 +60,11 @@ class SpatialBroadcast(nn.Module):
         h, w = sz
         x = E.repeat(x, "b c -> b h w c", h=h, w=w)
         # Interpolate positional encodings if needed.
-        enc: torch.Tensor = gen_2d_pe((h, w)).type_as(x) if self.pe_type == "linear" else self.pe  # type: ignore
+        pe = gen_2d_pe((h, w)).type_as(x) if self.pe_type == "linear" else self.pe
         if self.pe_type != "linear":
-            enc = interpolate_2d_pe(enc, (h, w))
-        enc = E.repeat(enc, "c h w -> b h w c", b=len(x))
-        x = torch.cat((enc, x), dim=3)
+            pe = interpolate_2d_pe(pe, (h, w))
+        pe = E.repeat(pe, "c h w -> b h w c", b=len(x))
+        x = torch.cat((pe, x), dim=3)
         return E.rearrange(x, "b h w c -> b c h w")
 
 
@@ -98,7 +99,7 @@ class SlotDecoder(nn.Module):
         self.out_dim = out_dim
         self.kernel_size = kernel_size
 
-        self.broadcast = SpatialBroadcast(pe_type, tuple(pe_size), pe_dim)  # type: ignore
+        self.broadcast = SpatialBroadcast(pe_type, pe_size, pe_dim)
 
         dims = [slot_dim + self.broadcast.pe_dim] + [hid_dim] * (depth - 1) + [out_dim]
         self.conv = CNN(dims, kernel_size)

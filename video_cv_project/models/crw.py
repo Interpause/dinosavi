@@ -28,7 +28,7 @@ __all__ = ["CRW"]
 class CRW(nn.Module):
     """Contrastive Random Walk model.
 
-    TODO: How to cite paper in a docstring? https://ajabri.github.io/videowalk/
+    Based on: https://ajabri.github.io/videowalk/
     NOTE: While it is called a model, Contrastive Random Walk is more similar in
     nature to a training technique than a model. In essence, this class is more
     of a trainer that wraps over the encoder being trained. Which is why loss calculation
@@ -208,7 +208,7 @@ class CRW(nn.Module):
             debug[f"acc/{name}"] = float(logits.argmax(-1).eq(target).float().mean())
 
         loss = torch.stack(losses).mean()
-        debug["acc"] = np.mean([v for k, v in debug.items() if "acc" in k])  # type: ignore
+        debug["acc"] = float(np.mean([v for k, v in debug.items() if "acc" in k]))
         debug["loss"] = float(loss)
         return loss, debug
 

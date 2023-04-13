@@ -6,15 +6,15 @@ from typing import List
 
 import einops as E
 import torch
+import torch.nn.functional as F
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
-import torch.nn.functional as F
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds
-from video_cv_project.models import SlotCPC, SlotModel
+from video_cv_project.models import SlotTrainer
 from video_cv_project.models.heads import AlphaSlotDecoder
 from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
 
@@ -24,7 +24,7 @@ TENSORBOARD_DIR = "."
 
 
 def attn_weight_method(
-    model: SlotCPC,
+    model: SlotTrainer,
     pats_t: torch.Tensor,
     num_slots: int = 7,
     num_iters: int = 1,
@@ -50,7 +50,7 @@ def attn_weight_method(
 
 
 def alpha_mask_method(
-    model: SlotCPC,
+    model: SlotTrainer,
     pats_t: torch.Tensor,
     num_slots: int = 7,
     num_iters: int = 1,
@@ -72,8 +72,8 @@ def alpha_mask_method(
         # Reset initial frame only things.
         i, m = num_iters, None
     slots_t = torch.stack(slots)
-    preds = model.time_mlp[0](slots_t)
-    # TODO: add batching here.
+    preds = model.time_decoder[0](slots_t)
+    # TODO: Add batching here.
     preds = E.rearrange(preds, "t 1 s c -> t s c")
     preds = decoder.get_alpha_masks(preds, (h, w))
     return preds
@@ -177,10 +177,10 @@ Ini Iters: {ini_iters}
                 colors[0] = torch.Tensor([191, 128, 64])
 
             if output_mode == "slot":
-                method = attn_weight_method  # type: ignore
+                method = attn_weight_method
                 log_label = "attn"
             elif output_mode == "alpha":
-                method = alpha_mask_method  # type: ignore
+                method = alpha_mask_method
                 log_label = "alpha"
             else:
                 assert False, f'Output mode "{output_mode}" unsupported!'

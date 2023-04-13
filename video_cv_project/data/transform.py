@@ -140,7 +140,7 @@ class PatchAndJitter(nn.Module):
         pats = F.unfold(im, self.size, stride=self.stride)
         pats = E.rearrange(pats, "t (c h w) n -> (t n) c h w", h=h, w=w)
         pats = [self.jitter(p) for p in pats]
-        pats: torch.Tensor = E.rearrange(pats, "(t n) c h w -> t n c h w", t=im.shape[0])  # type: ignore
+        pats: torch.Tensor = E.rearrange(pats, "(t n) c h w -> t n c h w", t=len(im))  # type: ignore
         # Keys are ids of start patches, values are ids of end patches.
         tgts = torch.arange(pats.shape[1])
         return pats, tgts
@@ -221,7 +221,7 @@ class PatchAndViT(nn.Module):
         #     self.compile_mode = "dynamo"
         #     # `dynamic` doesn't work for ViTModel.
         #     # Positional encoding interpolation cannot compile either.
-        #     self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")  # type: ignore
+        #     self.enc: ViTModel = torch.compile(self.enc, mode="max-autotune")
         #     self.enc.eval()  # Compile resets eval for some reason.
 
     @torch.inference_mode()

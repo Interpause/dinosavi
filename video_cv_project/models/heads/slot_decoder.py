@@ -15,11 +15,7 @@ __all__ = ["SlotDecoder", "AlphaSlotDecoder"]
 
 
 class SpatialBroadcast(nn.Module):
-    """Performs spatial broadcast.
-
-    Note, instead of using Linear Positional Encoding, we used Sinusoidal Positional
-    Encoding. Not sure what the impacts are.
-    """
+    """Performs spatial broadcast."""
 
     def __init__(
         self,
@@ -36,8 +32,15 @@ class SpatialBroadcast(nn.Module):
         """
         super(SpatialBroadcast, self).__init__()
 
-        # Helps to throw error if ``pe_size`` is changed after training.
-        self.register_buffer("pe", gen_2d_pe(pe_size, type=pe_type, sine_dim=pe_dim))
+        if pe_type == "learnt":
+            self.pe = nn.Parameter(
+                nn.init.xavier_uniform_(torch.empty(pe_dim, *pe_size))
+            )
+        else:
+            # Helps to throw error if ``pe_size`` is changed after training.
+            self.register_buffer(
+                "pe", gen_2d_pe(pe_size, type=pe_type, sine_dim=pe_dim)
+            )
 
         self.pe_type = pe_type
         self.pe_size = pe_size

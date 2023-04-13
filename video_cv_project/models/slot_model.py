@@ -2,6 +2,8 @@
 
 from typing import Tuple, Sequence
 
+from itertools import repeat
+
 import einops as E
 import torch
 import torch.nn as nn
@@ -204,13 +206,13 @@ class SlotCPC(nn.Module):
 
         self.is_trace = False
 
-    def _prop_slots(self, pats: torch.Tensor, masks: torch.Tensor):
+    def _prop_slots(self, pats: torch.Tensor, masks: torch.Tensor = None):
         """Propagate slots forward in time."""
         # TODO: If doing palindrome, reset cur_slots to None & iterate vid in reverse.
         s, slots_t, attn_t = None, [], []
         T, i = len(pats) - max(self.time_steps), self.ini_iters
 
-        if self.split_bg:
+        if self.split_bg and masks is not None:
             bg, fg = (
                 [self.num_slots] * 2
                 if isinstance(self.num_slots, int)
@@ -232,7 +234,7 @@ class SlotCPC(nn.Module):
             else:
                 assert False, f"Invalid bg mask strategy: {self.bg_mask_strategy}"
 
-        for p, m in zip(pats[:T], masks[:T]):
+        for p, m in zip(pats[:T], repeat(None) if masks is None else masks[:T]):  # type: ignore
             s, w = self.model(p, s, self.num_slots, i, m if self.split_bg else None)
             slots_t.append(s)
             attn_t.append(w)
@@ -241,11 +243,12 @@ class SlotCPC(nn.Module):
 
     def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Predict future features from slots."""
+        slots = E.rearrange(slots, "t b s c -> (t b) s c")
         if self.time_predict == "linear":
             preds_p = [l(slots) for l in self.time_mlp]
         elif self.time_predict == "attn":
             preds_p = [l(slots, slots, slots)[0] for l in self.time_attn]
-        preds = E.rearrange(preds_p, "p t b s c -> (p t b) s c")
+        preds = E.rearrange(preds_p, "p b s c -> (p b) s c")
         return self.decoder(preds, sz)  # (PTB)CHW
 
     def forward(
@@ -261,11 +264,7 @@ class SlotCPC(nn.Module):
             Tuple[torch.Tensor, dict]: Loss, metrics.
         """
         pats_t = E.rearrange(vid, "b t c h w -> t b c h w")
-        masks_t = (
-            [None] * len(pats_t)
-            if cls_attns is None
-            else E.rearrange(cls_attns, "b t n h w -> t b n h w")  # type: ignore
-        )
+        masks_t = None if cls_attns is None else E.rearrange(cls_attns, "b t n h w -> t b n h w")  # type: ignore
         slots_t, attn_t = self._prop_slots(pats_t, masks_t)  # type: ignore
 
         # Predict future time steps simultaneously.

@@ -69,8 +69,11 @@ def get_model_summary(model, sizes=SIZES, device=None):
         try:
             model_summary = summary(model, size, verbose=0, col_width=20, device=device)
         except Exception as e:
-            exc = e
+            try:
+                raise e from exc
+            except Exception as e2:
+                exc = e2
             continue
         model_summary.formatting.layer_name_width = 30
         return model_summary
-    raise exc
+    raise RuntimeError("No supported input sizes!") from exc

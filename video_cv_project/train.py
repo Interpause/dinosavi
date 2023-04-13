@@ -40,6 +40,7 @@ def train(cfg: DictConfig):
         log.warning("Dry run mode! Model will be not used.")
 
     log.debug("Create Model.")
+    log.info(f"Model Config:\n{cfg.model}")
     model = instantiate(cfg.model, _convert_="all")
     summary = get_model_summary(model, device=device)
     log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")

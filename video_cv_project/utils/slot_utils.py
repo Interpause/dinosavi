@@ -45,7 +45,11 @@ def inverted_scaled_mean_attention(
     """
     m = torch.tensor(0) if mask is None else mask
     if m.dtype == torch.bool:
-        m = torch.zeros(m.shape).masked_fill(m.logical_not(), float("-inf"))
+        m = (
+            torch.zeros(m.shape)
+            .to(q.device)
+            .masked_fill(m.logical_not(), float("-inf"))
+        )
     m = m.type_as(q)
 
     w = weight = F.softmax(q @ k.mT / (q.size(-1) ** 0.5) + m, dim=-2)

@@ -1,18 +1,18 @@
 # Config for SlotTrainer.
 
-time_steps: 0
-num_slots: 10
-num_iters: 1
-ini_iters: 1
-use_bgfg_groups: false
-bgfg_strategy: always
-time_decoder: attn
+time_steps: ${hparam.future.time_steps}
+num_slots: ${hparam.slot.num_slots}
+num_iters: ${hparam.slot.num_iters}
+ini_iters: ${hparam.slot.ini_iters}
+use_bgfg_groups: ${hparam.bgfg.enable}
+bgfg_strategy: ${hparam.bgfg.strategy}
+time_decoder: ${hparam.future.time_decoder}
 
 _target_: video_cv_project.models.SlotTrainer
 model:
   _target_: video_cv_project.models.SlotModel
-  slot_dim: 512
-  slot_hid_dim: 2048
+  slot_dim: ${hparam.slot.slot_dim}
+  slot_hid_dim: ${hparam.slot.hid_dim}
   use_bgfg_groups: ${..use_bgfg_groups}
   enc_cfg:
     _target_: transformers.ViTConfig.from_pretrained
@@ -29,10 +29,10 @@ decoder:
   _target_: video_cv_project.models.heads.AlphaSlotDecoder
   slot_dim: ${..model.slot_dim}
   # Should match dims of model.encoder's output feature map.
-  out_dim: 384
-  depth: 4
-  kernel_size: 1
-  hid_dim: 1024
-  pe_type: learnt
+  out_dim: ${hparam.general.out_dim}
+  depth: ${hparam.decode.depth}
+  kernel_size: ${hparam.decode.kernel_size}
+  hid_dim: ${hparam.decode.hid_dim}
+  pe_type: ${hparam.decode.pe_type}
   # Decoder handles positional encoding interpolation.
-  pe_size: [28, 28]
+  pe_size: ${hparam.decode.pe_size}

@@ -10,9 +10,9 @@ defaults:
 mode: eval-slot
 
 # If None, will be detected from model.
-num_slots:
-num_iters:
-ini_iters:
+num_slots: ${hparam.eval.num_slots}
+num_iters: ${hparam.eval.num_iters}
+ini_iters: ${hparam.eval.ini_iters}
 
 # Output to use:
 # - slot: Slot Attention weights.
@@ -20,11 +20,11 @@ ini_iters:
 output: slot # alpha
 
 # Whether to use lock-on.
-lock_on: true
+lock_on: ${hparam.eval.lock_on.enable}
 # [Lock on only] Slots per class.
-slots_per_class: 1
+slots_per_class: ${hparam.eval.lock_on.slots_per_class}
 # [Lock on only] Number of slots to use for background.
-num_bg_slots: 8
+num_bg_slots: ${hparam.eval.lock_on.num_bg_slots}
 
 data:
   dataset:

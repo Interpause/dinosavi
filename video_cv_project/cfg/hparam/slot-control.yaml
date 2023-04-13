@@ -1,0 +1,51 @@
+# Control variables for SlotTrainer & SlotModel.
+
+exp_name: slot
+
+general:
+  # vit_model: ${hydra:runtime.cwd}/pretrained/facebook/vit-msn-small
+  # vit_model: facebook/dino-vits8
+  vit_model: ${hydra:runtime.cwd}/pretrained/facebook/dino-vits8
+  im_size: 224
+  # Necessary unless inject the ViT feat dim into config at runtime.
+  out_dim: 384
+
+  epochs: 2
+  batch_size: 16
+  frames_per_clip: 8
+  framerate: 8
+
+  lr: 0.0001
+  pct_start: 0.1
+
+slot:
+  slot_dim: 512
+  hid_dim: 2048
+  num_slots: 10
+  num_iters: 1
+  ini_iters: 1
+
+bgfg:
+  enable: false
+  strategy: always
+
+future:
+  time_steps: 0
+  time_decoder: null
+
+decode:
+  depth: 4
+  kernel_size: 1
+  hid_dim: 1024
+  pe_type: learnt
+  # Depends on `im_size`. If not exact match, interpolation will be used.
+  pe_size: [28, 28]
+
+eval:
+  num_slots: null
+  num_iters: null
+  ini_iters: null
+  lock_on:
+    enable: true
+    slots_per_class: 1
+    num_bg_slots: 8

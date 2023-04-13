@@ -30,7 +30,7 @@ sampler:
 
 vid_cache:
   _target_: video_cv_project.data.cache.TensorCache
-  cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
+  cache_dir: ${cache_dir}
 
 data:
   # cache_path: /home/jovyan/downloads/kinetics400-train.pt

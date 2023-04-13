@@ -1,17 +1,21 @@
 # @package _global_
 # Base config for slot models. Not meant to be used directly.
 
+defaults:
+  - override /hparam: slot-control
+
 mode: help
 
-# vit_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/vit-msn-small
-vit_path: /home/jovyan/workspaces/video-cv-project/pretrained/facebook/dino-vits8
+exp_name: ${hparam.exp_name}
+vit_path: ${hparam.general.vit_model}
+cache_dir: ${hydra:runtime.cwd}/artifacts/cache
 
 data:
   transform:
     im_transforms:
       - _target_: video_cv_project.data.transform.HFTransform
         name: ${vit_path}
-        #size: 384
+        size: ${hparam.general.im_size}
 
     pipeline:
       # Normalization already done in HFTransform.
@@ -24,5 +28,5 @@ data:
       name: ${vit_path}
       batch_size: 2
       compile: true
-      cache_dir: /home/jovyan/workspaces/video-cv-project/artifacts/cache
+      cache_dir: ${cache_dir}
       device: ${device}

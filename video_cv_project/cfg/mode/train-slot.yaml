@@ -10,6 +10,7 @@ defaults:
 mode: train
 
 train:
+  # Hardcode to 1; Use `clips_per_vid` to control epochs instead.
   epochs: 1
 
   log_every: 50
@@ -20,21 +21,23 @@ train:
   # TODO: Optimizer/scheduler can be its own sub-config.
   optimizer:
     _target_: torch.optim.Adam
-    lr: 0.0001
+    lr: ${hparam.general.lr}
 
   scheduler:
     _target_: torch.optim.lr_scheduler.OneCycleLR
     max_lr: ${..optimizer.lr}
+    # `total_steps` is added in at runtime.
     total_steps: ${total_steps}
-    pct_start: 0.1
+    pct_start: ${hparam.general.pct_start}
 
 data:
   # cache_path: /home/jovyan/downloads/kinetics400-train.pt
-  batch_size: 16
+  batch_size: ${hparam.general.batch_size}
   num_workers: 16
-  clips_per_vid: 2
+  clips_per_vid: ${hparam.general.epochs}
   dataset:
-    frames_per_clip: 8
+    frame_rate: ${hparam.general.framerate}
+    frames_per_clip: ${hparam.general.frames_per_clip}
     step_between_clips: ${.frames_per_clip}
     # split: train
 

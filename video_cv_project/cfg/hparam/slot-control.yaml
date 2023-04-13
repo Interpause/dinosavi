@@ -1,4 +1,5 @@
 # Control variables for SlotTrainer & SlotModel.
+# DO NOT MODIFY.
 
 exp_name: slot
 

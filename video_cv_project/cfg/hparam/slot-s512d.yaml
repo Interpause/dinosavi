@@ -1,0 +1,6 @@
+defaults:
+  - slot-control
+
+slot:
+  slot_dim: 512
+  hid_dim: 2048

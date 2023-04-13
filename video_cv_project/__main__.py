@@ -31,8 +31,8 @@ def main(cfg: DictConfig):
 
             perf_hack()
             train(cfg)
-        elif cfg.mode == "eval":
-            from video_cv_project.eval import eval
+        elif cfg.mode == "eval-crw":
+            from video_cv_project.eval_crw import eval
             from video_cv_project.utils import perf_hack
 
             perf_hack()

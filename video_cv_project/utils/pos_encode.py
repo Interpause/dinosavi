@@ -54,7 +54,6 @@ def gen_2d_pe(size: Tuple[int, int], type: str = "linear", sine_dim: int = 4):
     assert False, f"`{type}` not supported! Only `linear` and `sine` supported."
 
 
-@cache
 def interpolate_2d_pe(embed: torch.Tensor, size: Tuple[int, int]):
     """Memoized function to interpolate positional encodings to new size.
 
@@ -67,6 +66,6 @@ def interpolate_2d_pe(embed: torch.Tensor, size: Tuple[int, int]):
     """
     if embed.shape[-2:] == size:
         return embed
-    # Yes, this seems messed up, but this is how ViT's resize encodings.
+    # Yes, this seems messed up, but this is how ViTs resize encodings.
     new: torch.Tensor = F.interpolate(embed[None], size=size, mode="bicubic")
     return new[0]

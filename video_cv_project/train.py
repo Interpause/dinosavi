@@ -40,7 +40,7 @@ def train(cfg: DictConfig):
         log.warning("Dry run mode! Model will be not used.")
 
     log.debug("Create Model.")
-    log.info(f"Model Config:\n{cfg.model}")
+    log.info(f"Model Config:\n{OmegaConf.to_object(cfg.model)}")
     model = instantiate(cfg.model, _convert_="all")
     summary = get_model_summary(model, device=device)
     log.info(f"Model Summary for Input Shape {summary.input_size[0]}:\n{summary}")
@@ -79,7 +79,7 @@ def train(cfg: DictConfig):
         checkpointer.load(resume_ckpt, ignore_keys=["optimizer", "lr_scheduler"])
         old_cfg = OmegaConf.create(checkpointer.cfg)
         log.info(f"Resume train from epoch {checkpointer.epoch}.")
-        log.debug(f"Ckpt Config:\n{old_cfg}")
+        log.info(f"Ckpt Config:\n{OmegaConf.to_object(old_cfg)}")
 
     trainer = Trainer(
         dataloader,

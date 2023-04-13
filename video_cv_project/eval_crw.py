@@ -42,7 +42,7 @@ def eval(cfg: DictConfig):
     checkpointer.load(resume_ckpt)
     # TODO: What config values to overwrite?
     old_cfg = OmegaConf.create(checkpointer.cfg)
-    log.debug(f"Ckpt Config:\n{old_cfg}")
+    log.info(f"Ckpt Config:\n{OmegaConf.to_object(old_cfg)}")
 
     encoder.to(device).eval()
 

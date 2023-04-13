@@ -1,18 +1,5 @@
 # @package _global_
-# Config for eval mode.
+# Default eval mode stub.
 
 defaults:
-  - override /data: davis
-
-mode: eval
-
-eval:
-  context_len: 20
-  topk: 10
-  radius: 12
-  temperature: 0.05
-  extra_idx: []
-
-data:
-  dataset:
-    context_len: ${eval.context_len}
+  - eval-slot

@@ -117,7 +117,7 @@ class SlotDecoder(nn.Module):
 
 
 class AlphaSlotDecoder(SlotDecoder):
-    """Use "alpha" channel to blend decoded slots maps together."""
+    """Uses convolutions and "alpha" channel to blend decoded slots maps together."""
 
     def __init__(self, slot_dim, out_dim, *args, **kwargs):
         """Refer to `video_cv_project.models.heads.SlotDecoder`."""
@@ -160,28 +160,4 @@ class AlphaSlotDecoder(SlotDecoder):
         return E.reduce(x[:, :-1] * alpha, "b c h w s -> b c h w", "sum")
 
 
-# class CrossSlotDecoder(SlotDecoder):
-#     """Cross-Attention across Slots Spatial Broadcast Decoder."""
-#
-#     def __init__(self, *args, **kwargs):
-#         """Refer to `video_cv_project.models.heads.SlotDecoder`."""
-#         super(CrossSlotDecoder, self).__init__(*args, **kwargs)
-#
-#         # TODO: Cross-attention implementation.
-#         # After cross-attention, should the dim be slot_dim or hid_dim or something else?
-#         self.attn = nn.Identity()
-#
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         """Forward pass.
-#
-#         Args:
-#             x (torch.Tensor): BSC slots.
-#
-#         Returns:
-#             torch.Tensor: BCHW decoded feature map.
-#         """
-#         # BSC -> BC
-#         x = self.attn(x)
-#         # BC -> BCHW
-#         x = self.broadcast(x)
-#         return self.conv(x)
+# TODO: Transformer-based decoder from DINOSAUR.

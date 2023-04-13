@@ -100,7 +100,7 @@ def eval(cfg: DictConfig):
     checkpointer.load(root_dir / cfg.resume)
     # TODO: What config values to overwrite?
     old_cfg = OmegaConf.create(checkpointer.cfg)
-    log.debug(f"Ckpt Config:\n{old_cfg.model}")
+    log.info(f"Ckpt Config:\n{OmegaConf.to_object(old_cfg.model)}")
 
     log.debug("Create Model.")
     model = instantiate(old_cfg.model, _convert_="all")

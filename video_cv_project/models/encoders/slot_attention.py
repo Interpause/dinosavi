@@ -140,10 +140,10 @@ class GroupSlotAttention(SlotAttention):
 
         # Parameters for groups are added to slot initialization distribution.
         self.groups_mu = nn.ParameterList(
-            torch.zeros(1, 1, slot_dim) for _ in range(groups)
+            nn.init.xavier_uniform_(torch.empty(1, 1, slot_dim)) for _ in range(groups)
         )
         self.groups_logvar = nn.ParameterList(
-            torch.zeros(1, 1, slot_dim) for _ in range(groups)
+            nn.init.xavier_uniform_(torch.empty(1, 1, slot_dim)) for _ in range(groups)
         )
 
     def _init_group_slots(

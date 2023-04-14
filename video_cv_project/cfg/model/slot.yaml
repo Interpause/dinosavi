@@ -1,5 +1,6 @@
 # Config for SlotTrainer.
 
+_target_: video_cv_project.models.SlotTrainer
 time_steps: ${hparam.future.time_steps}
 num_slots: ${hparam.slot.num_slots}
 num_iters: ${hparam.slot.num_iters}
@@ -8,7 +9,6 @@ use_bgfg_groups: ${hparam.bgfg.enable}
 bgfg_strategy: ${hparam.bgfg.strategy}
 time_decoder: ${hparam.future.time_decoder}
 
-_target_: video_cv_project.models.SlotTrainer
 model:
   _target_: video_cv_project.models.SlotModel
   slot_dim: ${hparam.slot.slot_dim}

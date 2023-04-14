@@ -132,7 +132,7 @@ class SlotTrainer(nn.Module):
         ini_iters: int = None,
         use_bgfg_groups: bool = False,
         bgfg_strategy: str = "initial",
-        time_decoder: str = "linear",
+        time_decoder: str = None,
     ):
         """Initialize SlotTrainer.
 
@@ -146,7 +146,7 @@ class SlotTrainer(nn.Module):
             ini_iters (int, optional): Number of iterations for slots to bind when first initialized. Defaults to `num_iters`.
             use_bgfg_groups (bool, optional): Use separate set of slots for background versus foreground.
             bgfg_strategy (str, optional): Either "initial" or "always".
-            time_decoder (str, optional): Either "linear" or "attn".
+            time_decoder (str, optional): Either "linear", "attn" or None.
         """
         super(SlotTrainer, self).__init__()
 
@@ -168,7 +168,7 @@ class SlotTrainer(nn.Module):
             # TODO: Config for number of heads here.
             layer = partial(nn.MultiheadAttention, model.slot_dim, 4, batch_first=True)
         elif time_decoder is None:
-            layer = nn.Identity
+            layer = partial(nn.Identity)
         else:
             assert False, f"Unsupported time decoder: {time_decoder}"
         self.time_decoder = nn.ModuleList(layer() for _ in range(len(self.time_steps)))

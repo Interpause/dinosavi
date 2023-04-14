@@ -12,6 +12,8 @@ __all__ = [
     "inverted_scaled_mean_attention",
     "bg_from_attn",
     "calc_slot_masks",
+    "calc_lock_on_masks",
+    "preds_from_lock_on",
     "infoNCE_loss",
     "vicreg_loss",
     "mse_loss",
@@ -109,6 +111,48 @@ def calc_slot_masks(
     else:
         assert False, f"Invalid strategy: {strategy}"
     return masks
+
+
+def calc_lock_on_masks(lbl: torch.Tensor, slots_bg: int, slots_per_class: int):
+    """Calculate per slot bitmasks from first frame labels.
+
+    Note this function assumes the background class id is 0.
+
+    Args:
+        lbl (torch.Tensor): *CHW class labels.
+        slots_bg (int): Number of slots given to background.
+        slots_per_class (int): Number of slots per class.
+
+    Returns:
+        Tuple[torch.Tensor, Tuple[int, int]]: *SN slot bitmasks, tuple of number of (background, foreground) slots.
+    """
+    lbl = E.rearrange(lbl, "... c h w -> c ... (h w)")
+    bg_lbl = E.repeat(lbl[:1], "1 ... n -> ... (1 s) n", s=slots_bg)
+    fg_lbl = E.repeat(lbl[1:], "c ... n -> ... (c s) n", s=slots_per_class)
+    lbl = torch.cat([bg_lbl, fg_lbl], dim=-2).bool()
+    return lbl, (bg_lbl.shape[-2], fg_lbl.shape[-2])
+
+
+def preds_from_lock_on(preds: torch.Tensor, slots_bg: int, slots_per_class: int):
+    """Merge each class prediction from multiple slot predictions.
+
+    Args:
+        preds (torch.Tensor): *SHW predictions.
+        slots_bg (int): Number of slots given to background.
+        slots_per_class (int): Number of slots per class.
+
+    Returns:
+        torch.Tensor: *CHW class predictions.
+    """
+    # Merge class slots by taking max.
+    bg_preds = E.reduce(preds[..., :slots_bg, :, :], "... s h w -> ... 1 h w", "max")
+    fg_preds = E.reduce(
+        preds[..., slots_bg:, :, :],
+        "... (n s) h w -> ... n h w",
+        "max",
+        s=slots_per_class,
+    )
+    return torch.cat([bg_preds, fg_preds], dim=-3)
 
 
 def infoNCE_loss(x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, dict]:

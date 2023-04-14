@@ -2,9 +2,7 @@
 
 import logging
 from time import time
-from typing import List
 
-import einops as E
 import torch
 import torch.nn.functional as F
 from hydra.utils import instantiate
@@ -13,79 +11,19 @@ from torch.utils.tensorboard import SummaryWriter
 
 from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
-from video_cv_project.engine import Checkpointer, dump_vos_preds
-from video_cv_project.models import SlotTrainer
-from video_cv_project.models.heads import AlphaSlotDecoder
-from video_cv_project.utils import get_dirs, get_model_summary, tb_hparams
+from video_cv_project.engine import Checkpointer, dump_vos_preds, infer_slot_labels
+from video_cv_project.utils import (
+    calc_lock_on_masks,
+    get_dirs,
+    get_model_summary,
+    preds_from_lock_on,
+    tb_hparams,
+    tb_log_preds,
+)
 
 log = logging.getLogger(__name__)
 
 TENSORBOARD_DIR = "."
-
-
-def attn_weight_method(
-    model: SlotTrainer,
-    pats_t: torch.Tensor,
-    num_slots: int = 7,
-    num_iters: int = 1,
-    ini_iters: int = 1,
-    lbl: torch.Tensor = None,
-):
-    """Use Slot Attention weights as labels."""
-    model = model.model
-    s = None
-    h, w = pats_t.shape[-2:]
-    pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
-    weights: List[torch.Tensor] = []
-    i = ini_iters
-    m = None if lbl is None else E.rearrange(lbl, "s h w -> 1 s (h w)").bool()
-    for p in pats_t:
-        s, attn = model(p, s, num_slots, i, m)
-        weights.append(attn)
-
-        # Reset initial frame only things.
-        i, m = num_iters, None
-    preds = E.rearrange(weights, "t 1 s (h w) -> t s h w", h=h, w=w)  # type: ignore
-    return preds
-
-
-def alpha_mask_method(
-    model: SlotTrainer,
-    pats_t: torch.Tensor,
-    num_slots: int = 7,
-    num_iters: int = 1,
-    ini_iters: int = 1,
-    lbl: torch.Tensor = None,
-):
-    """Use AlphaSlotDecoder alpha masks as labels."""
-    s = None
-    h, w = pats_t.shape[-2:]
-    pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
-    decoder: AlphaSlotDecoder = model.decoder  # type: ignore
-    slots = []
-    i = ini_iters
-    m = None if lbl is None else E.rearrange(lbl, "s h w -> 1 s (h w)").bool()
-    for p in pats_t:
-        s, _ = model.model(p, s, num_slots, i, m)
-        slots.append(s)
-
-        # Reset initial frame only things.
-        i, m = num_iters, None
-    slots_t = torch.stack(slots)
-    preds = model.time_decoder[0](slots_t)
-    # TODO: Add batching here.
-    preds = E.rearrange(preds, "t 1 s c -> t s c")
-    preds = decoder.get_alpha_masks(preds, (h, w))
-    return preds
-
-
-def tb_log_preds(writer: SummaryWriter, tag: str, preds: torch.Tensor):
-    """Log the attention & alpha masks."""
-    preds = E.rearrange(preds, "t s h w -> s t h w 1")
-    # Normalize to [0, 1].
-    preds = (preds - preds.min()) / (preds.max() - preds.min())
-    for i, p in enumerate(preds):
-        writer.add_images(f"{tag}/{i}", p, dataformats="NHWC")
 
 
 def eval(cfg: DictConfig):
@@ -165,43 +103,29 @@ Ini Iters: {ini_iters}
 
             # If lock on is used, override number of slots to match labels.
             if lock_on:
-                lbl = F.interpolate(lbls[:1], pats_t.shape[-2:])[0].to(device)
-                # NOTE: Below assumes background class id is 0.
-                bg_lbl = E.repeat(lbl[:1], "1 h w -> (1 s) h w", s=num_bslots)
-                fg_lbl = E.repeat(lbl[1:], "n h w -> (n s) h w", s=num_cslots)
-                lbl = torch.cat([bg_lbl, fg_lbl], dim=0)
-                num_slots = (len(bg_lbl), len(fg_lbl)) if use_bgfg else len(lbl)
+                lbl = F.interpolate(lbls[:1], pats_t.shape[-2:]).to(device)
+                lbl, num_slots = calc_lock_on_masks(lbl, num_bslots, num_cslots)
+                num_slots = num_slots if use_bgfg else sum(num_slots)
             else:
                 lbl = None
                 # Was black which is hard to see.
                 colors[0] = torch.Tensor([191, 128, 64])
 
-            if output_mode == "slot":
-                method = attn_weight_method
-                log_label = "attn"
-            elif output_mode == "alpha":
-                method = alpha_mask_method
-                log_label = "alpha"
-            else:
-                assert False, f'Output mode "{output_mode}" unsupported!'
-            preds = method(model, pats_t, num_slots, num_iters, ini_iters, lbl)
+            preds = infer_slot_labels(
+                model, pats_t, num_slots, num_iters, ini_iters, lbl, output_mode
+            )
 
             # Map multiple slots back to specific class when using lock on.
             if lock_on:
-                # Merge class slots by taking max.
-                bg_preds = E.reduce(preds[:, :num_bslots], "t s h w -> t 1 h w", "max")
-                fg_preds = E.reduce(
-                    preds[:, num_bslots:], "t (n s) h w -> t n h w", "max", s=num_cslots
-                )
                 # Comment below out to see what each slot is doing.
-                preds = torch.cat([bg_preds, fg_preds], dim=1)
+                preds = preds_from_lock_on(preds, num_bslots, num_cslots)
                 # Flip order of preds to allow palette to be assigned to foreground slots.
                 # preds = preds[:, ::-1]
 
             log.debug(f"Inference: {time() - t_infer:.4f} s")
 
             t_save = time()
-            tb_log_preds(writer, f"vid{i}-{log_label}", preds)
+            tb_log_preds(writer, f"vid{i}-{output_mode}", preds)
             dump_vos_preds(
                 save_dir,
                 meta["im_paths"],

@@ -10,11 +10,57 @@ import torch.nn.functional as F
 from video_cv_project.cfg import BEST_DEVICE
 
 __all__ = [
+    "infer_slot_labels",
     "calc_context_frame_idx",
     "create_spatial_mask",
     "batched_affinity",
     "propagate_labels",
 ]
+
+
+@torch.inference_mode()
+def infer_slot_labels(
+    model,
+    pats_t: torch.Tensor,
+    num_slots: int = 7,
+    num_iters: int = 1,
+    ini_iters: int = 1,
+    lbl: torch.Tensor = None,
+    method: str = "slot",
+) -> torch.Tensor:
+    """Infer labels using Slot Attention based model.
+
+    Args:
+        model (Any): Model.
+        pats_t (torch.Tensor): TCHW latent pixels.
+        num_slots (int, optional): Number of slots. Defaults to 7.
+        num_iters (int, optional): Iterations for Slot Attention. Defaults to 1.
+        ini_iters (int, optional): Iterations for first frame. Defaults to 1.
+        lbl (torch.Tensor, optional): Class labels for first frame. Defaults to None.
+        method (str, optional): Either "slot" or "alpha". Defaults to "slot".
+
+    Returns:
+        torch.Tensor: TSHW slot predictions.
+    """
+    h, w = pats_t.shape[-2:]
+    slots, iters = None, ini_iters
+
+    pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
+    preds = []
+    for p in pats_t:
+        slots, attn = model.model(p, slots, num_slots, iters, lbl)
+
+        if method == "slot":
+            preds.append(E.rearrange(attn, "1 s (h w) -> 1 s h w", h=h, w=w))
+        elif method == "alpha":
+            preds.append(model.get_masks(slots, (h, w)))
+        else:
+            assert False, f"Method not supported: {method}"
+
+        # Reset first frame only things.
+        iters, lbl = num_iters, None
+
+    return torch.cat(preds, dim=0)
 
 
 @cache

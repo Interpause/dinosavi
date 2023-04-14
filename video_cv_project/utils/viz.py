@@ -9,8 +9,9 @@ import torch
 import torchvision.transforms.functional as F
 from omegaconf import DictConfig, OmegaConf
 from PIL import Image
+from torch.utils.tensorboard import SummaryWriter
 
-__all__ = ["save_image", "label_to_image", "tb_viz_slots", "tb_hparams"]
+__all__ = ["save_image", "label_to_image", "tb_viz_slots", "tb_log_preds", "tb_hparams"]
 
 
 def save_image(image: torch.Tensor, path: Path, palette: List[int] = None):
@@ -63,6 +64,15 @@ def tb_viz_slots(pats: torch.Tensor, attns: torch.Tensor):
         metadata=attns.detach().cpu().argmax(dim=0).tolist(),
     )
     return "add_embedding", kwargs
+
+
+def tb_log_preds(writer: SummaryWriter, tag: str, preds: torch.Tensor):
+    """Log the attention & alpha masks."""
+    preds = E.rearrange(preds, "t s h w -> s t h w 1")
+    # Normalize to [0, 1].
+    preds = (preds - preds.min()) / (preds.max() - preds.min())
+    for i, p in enumerate(preds):
+        writer.add_images(f"{tag}/{i}", p, dataformats="NHWC")
 
 
 def tb_hparams(cfg: DictConfig):

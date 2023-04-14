@@ -104,6 +104,18 @@ class SlotDecoder(nn.Module):
         dims = [slot_dim + self.broadcast.pe_dim] + [hid_dim] * (depth - 1) + [out_dim]
         self.conv = CNN(dims, kernel_size)
 
+    def get_masks(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
+        """Inference route.
+
+        Args:
+            x (torch.Tensor): BSC slots.
+            sz (Tuple[int, int]): Size (H, W) of the feature map to broadcast to.
+
+        Returns:
+            torch.Tensor: BSHW masks for each slot.
+        """
+        raise NotImplementedError
+
     def forward(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Forward pass.
 
@@ -124,7 +136,7 @@ class AlphaSlotDecoder(SlotDecoder):
         """Refer to `video_cv_project.models.heads.SlotDecoder`."""
         super(AlphaSlotDecoder, self).__init__(slot_dim, out_dim + 1, *args, **kwargs)
 
-    def get_alpha_masks(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
+    def get_masks(self, x: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Inference route.
 
         Args:

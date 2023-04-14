@@ -207,15 +207,30 @@ class SlotTrainer(nn.Module):
             i = self.num_iters
         return torch.stack(slots_t), torch.stack(attn_t)
 
+    def _decode_time(self, slots: torch.Tensor, step: int) -> torch.Tensor:
+        """Decode BSC slots for time step."""
+        l = self.time_decoder[step]
+        return l(slots, slots, slots)[0] if self.time_dec_type == "attn" else l(slots)
+
     def _pred_feats(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
         """Predict future features from slots."""
         slots = E.rearrange(slots, "t b s c -> (t b) s c")
-        if self.time_dec_type == "attn":
-            preds_p = [l(slots, slots, slots)[0] for l in self.time_decoder]
-        else:
-            preds_p = [l(slots) for l in self.time_decoder]
-        preds = E.rearrange(preds_p, "p b s c -> (p b) s c")
+        preds_p = [self._decode_time(slots, i) for i in range(len(self.time_steps))]
+        preds = E.rearrange(preds_p, "p b s c -> (p b) s c")  # type: ignore
         return self.decoder(preds, sz)  # (PTB)CHW
+
+    def get_masks(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
+        """Decode slots to get decoder masks.
+
+        Args:
+            slots (torch.Tensor): BSC slots.
+            sz (Tuple[int, int]): Size (H, W) of mask.
+
+        Returns:
+            torch.Tensor: BSHW masks.
+        """
+        slots = self._decode_time(slots, 0)
+        return self.decoder.get_masks(slots, sz)
 
     def forward(
         self, vid: torch.Tensor, cls_attns: torch.Tensor = None

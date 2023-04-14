@@ -60,6 +60,18 @@ class DINOSAUR(nn.Module):
         slots = E.rearrange(slots, "t b s c -> (t b) s c")
         return self.decoder(slots, sz)
 
+    def get_masks(self, slots: torch.Tensor, sz: Tuple[int, int]) -> torch.Tensor:
+        """Decode slots to get decoder masks.
+
+        Args:
+            slots (torch.Tensor): BSC slots.
+            sz (Tuple[int, int]): Size (H, W) of mask.
+
+        Returns:
+            torch.Tensor: BSHW masks.
+        """
+        return self.decoder.get_masks(slots, sz)
+
     def forward(
         self, vid: torch.Tensor, cls_attns: torch.Tensor = None
     ) -> Tuple[torch.Tensor, dict]:

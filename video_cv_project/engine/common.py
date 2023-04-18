@@ -7,6 +7,7 @@ import einops as E
 import numpy as np
 import torch
 import torch.nn.functional as F
+from scipy.optimize import linear_sum_assignment
 
 from video_cv_project.cfg import BEST_DEVICE
 
@@ -98,22 +99,27 @@ def infer_slot_labels(
         path: torch.Tensor = None  # type: ignore
         rearr = [preds[0]]
         for i, edge in enumerate(edges, start=1):
+            edge = F.softmax(edge, dim=1)
             path = edge if path is None else path @ edge
 
-            _, idx = path.flatten().topk(num_slots**2)
-            row, col = np.unravel_index(idx.numpy(force=True), path.shape)
+            _, col = linear_sum_assignment(path, maximize=True)
+            rearr.append(preds[i, col])
 
-            used = set()
-            pairs: list = [None] * num_slots
-            for s, e in zip(row, col):
-                if pairs[s] is not None or e in used:
-                    continue
-                pairs[s] = e
-                used.add(e)
-                if len(used) == num_slots:
-                    break
+            # Greedy matching approach.
+            # _, idx = path.flatten().topk(num_slots**2)
+            # row, col = np.unravel_index(idx.numpy(force=True), path.shape)
+            #
+            # used = set()
+            # pairs: list = [None] * num_slots
+            # for s, e in zip(row, col):
+            #     if pairs[s] is not None or e in used:
+            #         continue
+            #     pairs[s] = e
+            #     used.add(e)
+            #     if len(used) == num_slots:
+            #         break
+            # rearr.append(preds[i, pairs])
 
-            rearr.append(preds[i, pairs])
         return torch.stack(rearr, dim=0)
     return preds
 

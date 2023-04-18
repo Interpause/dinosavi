@@ -94,9 +94,9 @@ class DINOSAUR(nn.Module):
         h, w = pats_t.shape[-2:]
         x = self._pred_feats(slots_t, (h, w))
         # Flatten every pixel in batch together for loss.
-        x = E.rearrange(x, "(t b) c h w -> t (b h w) c", t=T)
+        x = E.rearrange(x, "(t b) c h w -> 1 t (b h w) c", t=T)
         x = self.layernorm(x)  # Uniformity with ViT.
-        y = E.rearrange(pats_t, "t b c h w -> t (b h w) c")
+        y = E.rearrange(pats_t, "t b c h w -> 1 t (b h w) c")
 
         loss, debug = mse_loss(x, y)
         # NOTE: When logs are flushed to disk, this takes significant time to write.

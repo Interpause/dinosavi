@@ -1,0 +1,5 @@
+defaults:
+  - slot-s256d
+
+decode:
+  pe_type: linear

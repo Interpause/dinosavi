@@ -47,6 +47,6 @@ eval:
   num_iters: null
   ini_iters: null
   lock_on:
-    enable: true
+    enable: false
     slots_per_class: 1
     num_bg_slots: 8

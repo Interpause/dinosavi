@@ -4,6 +4,7 @@ from functools import cache
 from typing import Tuple
 
 import einops as E
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -27,6 +28,7 @@ def infer_slot_labels(
     ini_iters: int = 1,
     lbl: torch.Tensor = None,
     method: str = "slot",
+    track_method: str = None,
 ) -> torch.Tensor:
     """Infer labels using Slot Attention based model.
 
@@ -38,6 +40,7 @@ def infer_slot_labels(
         ini_iters (int, optional): Iterations for first frame. Defaults to 1.
         lbl (torch.Tensor, optional): Class labels for first frame. Defaults to None.
         method (str, optional): Either "slot" or "alpha". Defaults to "slot".
+        track_method (str, optional): Method used to rearrange predictions, either "overlap" or "slotsim". Defaults to None.
 
     Returns:
         torch.Tensor: TSHW slot predictions.
@@ -46,9 +49,15 @@ def infer_slot_labels(
     slots, iters = None, ini_iters
 
     pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
-    preds = []
+    preds, edges = [], []
     for p in pats_t:
-        slots, attn = model.model(p, slots, num_slots, iters, lbl)
+        prev = slots
+        slots, attn = model.model(p, prev, num_slots, iters, lbl)
+
+        if track_method == "slotsim" and prev is not None:
+            a = F.normalize(prev, dim=2)
+            b = F.normalize(slots, dim=2)
+            edges.append(E.einsum(a, b, "1 s c, 1 e c -> s e"))
 
         if method == "slot":
             preds.append(E.rearrange(attn, "1 s (h w) -> 1 s h w", h=h, w=w))
@@ -60,7 +69,53 @@ def infer_slot_labels(
         # Reset first frame only things.
         iters, lbl = num_iters, None
 
-    return torch.cat(preds, dim=0)
+    preds = torch.cat(preds, dim=0)
+
+    if track_method == "overlap":
+        t0, t1 = preds[:-1], preds[1:]
+        t0 = E.repeat(t0, "t s h w -> t s e h w", e=num_slots)
+        t1 = E.repeat(t1, "t s h w -> t e s h w", e=num_slots)
+
+        # Below is IoU/Jaccard logically extended to non-binary masks.
+        t01 = torch.stack([t0, t1])
+        intersect = E.reduce(t01, "i t s e h w -> t s e h w", "max")
+        intersect = E.reduce(intersect, "t s e h w -> t s e", "sum")
+        union = E.reduce(t01, "i t s e h w -> t s e h w", "prod")
+        union = E.reduce(union, "t s e h w -> t s e", "sum")
+        edges = list(intersect / union)
+
+        # RMS error approach.
+        # edges = list(E.reduce((t1 - t0).square(), "t s e h w -> t s e", "sum").pow(-2))
+
+    elif track_method == "slot_sim":
+        pass
+    elif track_method is None:
+        pass
+    else:
+        assert False, f"Unsupported track method: {track_method}"
+
+    if track_method is not None:
+        path: torch.Tensor = None  # type: ignore
+        rearr = [preds[0]]
+        for i, edge in enumerate(edges, start=1):
+            path = edge if path is None else path @ edge
+
+            _, idx = path.flatten().topk(num_slots**2)
+            row, col = np.unravel_index(idx.numpy(force=True), path.shape)
+
+            used = set()
+            pairs: list = [None] * num_slots
+            for s, e in zip(row, col):
+                if pairs[s] is not None or e in used:
+                    continue
+                pairs[s] = e
+                used.add(e)
+                if len(used) == num_slots:
+                    break
+
+            rearr.append(preds[i, pairs])
+        return torch.stack(rearr, dim=0)
+    return preds
 
 
 @cache

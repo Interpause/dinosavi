@@ -30,6 +30,8 @@ train:
     total_steps: ${total_steps}
     pct_start: ${hparam.general.pct_start}
 
+  clip_gradnorm: ${hparam.general.clip_gradnorm}
+
 data:
   # cache_path: /home/jovyan/downloads/kinetics400-train.pt
   batch_size: ${hparam.general.batch_size}

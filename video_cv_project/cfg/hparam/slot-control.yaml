@@ -18,6 +18,7 @@ general:
 
   lr: 0.0001
   pct_start: 0.1
+  clip_gradnorm: null
 
 slot:
   slot_dim: 512

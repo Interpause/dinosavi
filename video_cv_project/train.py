@@ -32,6 +32,7 @@ def train(cfg: DictConfig):
     log_every = cfg.train.log_every
     save_every = cfg.train.save_every
     dryrun = cfg.train.dryrun
+    clip_norm = cfg.train.clip_gradnorm
 
     log.info(f"Torch Device: {device}")
     log.info(f"Epochs: {epochs}")
@@ -115,5 +116,7 @@ def train(cfg: DictConfig):
 
         optimizer.zero_grad()
         loss.backward()
+        if clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
         optimizer.step()
         scheduler.step()

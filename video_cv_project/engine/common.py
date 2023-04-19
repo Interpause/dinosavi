@@ -30,6 +30,7 @@ def infer_slot_labels(
     lbl: torch.Tensor = None,
     method: str = "slot",
     track_method: str = None,
+    temperature: float = 0.05,
 ) -> torch.Tensor:
     """Infer labels using Slot Attention based model.
 
@@ -42,6 +43,7 @@ def infer_slot_labels(
         lbl (torch.Tensor, optional): Class labels for first frame. Defaults to None.
         method (str, optional): Either "slot" or "alpha". Defaults to "slot".
         track_method (str, optional): Method used to rearrange predictions, either "overlap" or "slotsim". Defaults to None.
+        temperature (float, optional): Temperature for `track_method`.
 
     Returns:
         torch.Tensor: TSHW slot predictions.
@@ -56,9 +58,9 @@ def infer_slot_labels(
         slots, attn = model.model(p, prev, num_slots, iters, lbl)
 
         if track_method == "slotsim" and prev is not None:
-            a = F.normalize(prev, dim=2)
-            b = F.normalize(slots, dim=2)
-            edges.append(E.einsum(a, b, "1 s c, 1 e c -> s e"))
+            a = F.normalize(prev[0], dim=1)
+            b = F.normalize(slots[0], dim=1)
+            edges.append(E.einsum(a, b, "s c, e c -> s e"))
 
         if method == "slot":
             preds.append(E.rearrange(attn, "1 s (h w) -> 1 s h w", h=h, w=w))
@@ -79,16 +81,16 @@ def infer_slot_labels(
 
         # Below is IoU/Jaccard logically extended to non-binary masks.
         t01 = torch.stack([t0, t1])
-        intersect = E.reduce(t01, "i t s e h w -> t s e h w", "max")
-        intersect = E.reduce(intersect, "t s e h w -> t s e", "sum")
-        union = E.reduce(t01, "i t s e h w -> t s e h w", "prod")
+        union = E.reduce(t01, "i t s e h w -> t s e h w", "max")
         union = E.reduce(union, "t s e h w -> t s e", "sum")
+        intersect = E.reduce(t01, "i t s e h w -> t s e h w", "prod")
+        intersect = E.reduce(intersect, "t s e h w -> t s e", "sum")
         edges = list(intersect / union)
 
         # RMS error approach.
         # edges = list(E.reduce((t1 - t0).square(), "t s e h w -> t s e", "sum").pow(-2))
 
-    elif track_method == "slot_sim":
+    elif track_method == "slotsim":
         pass
     elif track_method is None:
         pass
@@ -99,7 +101,7 @@ def infer_slot_labels(
         path: torch.Tensor = None  # type: ignore
         rearr = [preds[0]]
         for i, edge in enumerate(edges, start=1):
-            edge = F.softmax(edge, dim=1)
+            edge = F.softmax(edge / temperature, dim=1)
             path = edge if path is None else path @ edge
 
             _, col = linear_sum_assignment(path, maximize=True)

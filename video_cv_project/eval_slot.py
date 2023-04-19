@@ -49,6 +49,8 @@ def eval(cfg: DictConfig):
 
     # Can override some stuff here.
     lock_on = cfg.lock_on
+    track_mode = cfg.track_mode
+    track_temp = cfg.track_temperature
     output_mode = cfg.output
     num_slots = model.num_slots if cfg.num_slots is None else cfg.num_slots
     num_bslots = cfg.num_bg_slots
@@ -59,6 +61,7 @@ def eval(cfg: DictConfig):
 
     log.info(
         f"""Lock On: {lock_on}
+Track Mode: {track_mode}
 BG FG Mode: {use_bgfg}
 Output Mode: {output_mode}
 Num Slots: {num_cslots if lock_on else num_slots}
@@ -91,7 +94,6 @@ Ini Iters: {ini_iters}
         t_data, t_infer, t_save = time(), 0.0, 0.0
         for i, (ims, lbls, colors, meta) in enumerate(dataloader):
             T, save_dir = len(ims), out_dir / "results"
-            # Prepended frames are inferred on & contribute to run time.
             log.info(
                 f"{i+1}/{len(dataloader)}: Processing {meta['im_dir']} with {T} frames."
             )
@@ -112,7 +114,15 @@ Ini Iters: {ini_iters}
                 colors[0] = torch.Tensor([191, 128, 64])
 
             preds = infer_slot_labels(
-                model, pats_t, num_slots, num_iters, ini_iters, lbl, output_mode
+                model,
+                pats_t,
+                num_slots,
+                num_iters,
+                ini_iters,
+                lbl,
+                output_mode,
+                track_method=track_mode,
+                temperature=track_temp,
             )
 
             # Map multiple slots back to specific class when using lock on.

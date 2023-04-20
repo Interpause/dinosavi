@@ -113,44 +113,51 @@ def calc_slot_masks(
     return masks
 
 
-def calc_lock_on_masks(lbl: torch.Tensor, slots_bg: int, slots_per_class: int):
+def calc_lock_on_masks(
+    bg: torch.Tensor,
+    num_bg: int,
+    fg: torch.Tensor,
+    num_fg: int,
+    extra: torch.Tensor,
+    num_extra: int,
+):
     """Calculate per slot bitmasks from first frame labels.
 
-    Note this function assumes the background class id is 0.
-
     Args:
-        lbl (torch.Tensor): *CHW class labels.
-        slots_bg (int): Number of slots given to background.
-        slots_per_class (int): Number of slots per class.
+        bg (torch.Tensor): *HW background label.
+        num_bg (int): Number of slots assigned to background.
+        fg (torch.Tensor): *CHW class labels.
+        num_fg (int): Number of slots assigned per class.
+        extra (torch.Tensor): *HW extra foreground label.
+        num_extra (int): Number of slots to assign to foreground objects altogether.
 
     Returns:
         Tuple[torch.Tensor, Tuple[int, int]]: *SN slot bitmasks, tuple of number of (background, foreground) slots.
     """
-    lbl = E.rearrange(lbl, "... c h w -> c ... (h w)")
-    bg_lbl = E.repeat(lbl[:1], "1 ... n -> ... (1 s) n", s=slots_bg)
-    fg_lbl = E.repeat(lbl[1:], "c ... n -> ... (c s) n", s=slots_per_class)
-    lbl = torch.cat([bg_lbl, fg_lbl], dim=-2).bool()
-    return lbl, (bg_lbl.shape[-2], fg_lbl.shape[-2])
+    bg_lbl = E.repeat(bg, "... h w -> ... s (h w)", s=num_bg)
+    fg_lbl = E.repeat(fg, "... c h w -> ... (c s) (h w)", s=num_fg)
+    extra_lbl = E.repeat(extra, "... h w -> ... s (h w)", s=num_extra)
+    lbl = torch.cat([bg_lbl, extra_lbl, fg_lbl], dim=-2).bool()
+    return lbl, (bg_lbl.shape[-2], extra_lbl.shape[-2] + fg_lbl.shape[-2])
 
 
-def preds_from_lock_on(preds: torch.Tensor, slots_bg: int, slots_per_class: int):
+def preds_from_lock_on(preds: torch.Tensor, num_bg: int, num_fg: int, num_extra: int):
     """Merge each class prediction from multiple slot predictions.
 
     Args:
         preds (torch.Tensor): *SHW predictions.
-        slots_bg (int): Number of slots given to background.
-        slots_per_class (int): Number of slots per class.
+        num_bg (int): Number of slots assigned to background.
+        num_fg (int): Number of slots assigned per class.
+        num_extra (int): Number of slots to assign to foreground objects altogether.
 
     Returns:
         torch.Tensor: *CHW class predictions.
     """
+    num_bg = num_bg + num_extra
     # Merge class slots by taking max.
-    bg_preds = E.reduce(preds[..., :slots_bg, :, :], "... s h w -> ... 1 h w", "max")
+    bg_preds = E.reduce(preds[..., :num_bg, :, :], "... s h w -> ... 1 h w", "max")
     fg_preds = E.reduce(
-        preds[..., slots_bg:, :, :],
-        "... (n s) h w -> ... n h w",
-        "max",
-        s=slots_per_class,
+        preds[..., num_bg:, :, :], "... (n s) h w -> ... n h w", "max", s=num_fg
     )
     return torch.cat([bg_preds, fg_preds], dim=-3)
 

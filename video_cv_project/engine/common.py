@@ -27,7 +27,7 @@ def infer_slot_labels(
     num_slots: int = 7,
     num_iters: int = 1,
     ini_iters: int = 1,
-    lbl: torch.Tensor = None,
+    masks: torch.Tensor = None,
     method: str = "slot",
     track_method: str = None,
     temperature: float = 0.05,
@@ -40,7 +40,7 @@ def infer_slot_labels(
         num_slots (int, optional): Number of slots. Defaults to 7.
         num_iters (int, optional): Iterations for Slot Attention. Defaults to 1.
         ini_iters (int, optional): Iterations for first frame. Defaults to 1.
-        lbl (torch.Tensor, optional): Class labels for first frame. Defaults to None.
+        masks (torch.Tensor, optional): TSN masks for each slot. Defaults to None.
         method (str, optional): Either "slot" or "alpha". Defaults to "slot".
         track_method (str, optional): Method used to rearrange predictions, either "overlap" or "slotsim". Defaults to None.
         temperature (float, optional): Temperature for `track_method`.
@@ -53,9 +53,11 @@ def infer_slot_labels(
 
     pats_t = E.rearrange(pats_t, "t c h w -> t 1 c h w")
     preds, edges = [], []
-    for p in pats_t:
+    masks = None if masks is None else masks.unsqueeze(1)
+    for i, p in enumerate(pats_t):
         prev = slots
-        slots, attn = model.model(p, prev, num_slots, iters, lbl)
+        m = None if masks is None else masks[i]
+        slots, attn = model.model(p, prev, num_slots, iters, m)
 
         if track_method == "slotsim" and prev is not None:
             a = F.normalize(prev[0], dim=1)
@@ -70,7 +72,7 @@ def infer_slot_labels(
             assert False, f"Method not supported: {method}"
 
         # Reset first frame only things.
-        iters, lbl = num_iters, None
+        iters = num_iters
 
     preds = torch.cat(preds, dim=0)
 

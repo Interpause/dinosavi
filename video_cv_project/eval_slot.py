@@ -3,6 +3,7 @@
 import logging
 from time import time
 
+import einops as E
 import torch
 import torch.nn.functional as F
 from hydra.utils import instantiate
@@ -13,6 +14,7 @@ from video_cv_project.cfg import BEST_DEVICE
 from video_cv_project.data import DAVISDataset, create_davis_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds, infer_slot_labels
 from video_cv_project.utils import (
+    bg_from_attn,
     calc_lock_on_masks,
     get_dirs,
     get_model_summary,
@@ -55,6 +57,7 @@ def eval(cfg: DictConfig):
     num_slots = model.num_slots if cfg.num_slots is None else cfg.num_slots
     num_bslots = cfg.num_bg_slots
     num_cslots = cfg.slots_per_class
+    num_eslots = 2
     use_bgfg = not isinstance(num_slots, int)
     num_iters = model.num_iters if cfg.num_iters is None else cfg.num_iters
     ini_iters = model.ini_iters if cfg.ini_iters is None else cfg.ini_iters
@@ -100,16 +103,37 @@ Ini Iters: {ini_iters}
             log.debug(f"Data: {time() - t_data:.4f} s")
 
             t_infer = time()
-            pats_t, _ = encoder(ims)
+            pats_t, cls_attns = encoder(ims)
             pats_t = pats_t.to(device)
 
             # If lock on is used, override number of slots to match labels.
             if lock_on:
-                lbl = F.interpolate(lbls[:1], pats_t.shape[-2:]).to(device)
-                lbl, num_slots = calc_lock_on_masks(lbl, num_bslots, num_cslots)
+                # Get only first frame's labels and resize.
+                lbl = F.interpolate(lbls[:1], pats_t.shape[-2:])[0].to(device)
+
+                # THW bitmask from `cls_attns` where True is background.
+                attn_bg = bg_from_attn(cls_attns)
+
+                # Get extra foreground objects not included in lbl.
+                extra = lbl[0].logical_xor(attn_bg[0]).logical_and(lbl[0])
+
+                # Calculate slot masks for first frame labels.
+                mask, num_slots = calc_lock_on_masks(
+                    lbl[0], num_bslots, lbl[1:], num_cslots, extra, num_eslots
+                )
                 num_slots = num_slots if use_bgfg else sum(num_slots)
+
+                # Create mask.
+                masks = torch.ones(len(pats_t), *mask.shape).bool()
+
+                # Use `cls_attns` to restrict background slots from foreground.
+                # But don't restrict foreground slots since imperfect.
+                masks[:, :num_bslots] = E.rearrange(attn_bg, "t h w -> t 1 (h w)")
+
+                # Set first frame masks based on first frame labels.
+                masks[0] = mask
             else:
-                lbl = None
+                masks = None
                 # Was black which is hard to see.
                 colors[0] = torch.Tensor([191, 128, 64])
 
@@ -119,16 +143,16 @@ Ini Iters: {ini_iters}
                 num_slots,
                 num_iters,
                 ini_iters,
-                lbl,
+                masks,
                 output_mode,
-                track_method=track_mode,
-                temperature=track_temp,
+                track_mode,
+                track_temp,
             )
 
             # Map multiple slots back to specific class when using lock on.
             if lock_on:
                 # Comment below out to see what each slot is doing.
-                preds = preds_from_lock_on(preds, num_bslots, num_cslots)
+                preds = preds_from_lock_on(preds, num_bslots, num_cslots, num_eslots)
                 # Flip order of preds to allow palette to be assigned to foreground slots.
                 # preds = preds[:, ::-1]
 

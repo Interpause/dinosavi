@@ -1,0 +1,9 @@
+defaults:
+  - slot-s256d
+
+bgfg:
+  enable: true
+  strategy: always
+
+slot:
+  num_slots: [5, 5]

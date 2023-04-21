@@ -1,0 +1,5 @@
+defaults:
+  - slot-s256d
+
+slot:
+  ini_iters: 5

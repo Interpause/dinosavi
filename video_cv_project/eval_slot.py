@@ -94,7 +94,7 @@ Ini Iters: {ini_iters}
     has_palette = dataset.has_palette
 
     with torch.inference_mode():
-        t_data, t_infer, t_save = time(), 0.0, 0.0
+        t_data, t_encode, t_infer, t_save = time(), 0.0, 0.0, 0.0
         for i, (ims, lbls, colors, meta) in enumerate(dataloader):
             T, save_dir = len(ims), out_dir / "results"
             log.info(
@@ -102,40 +102,58 @@ Ini Iters: {ini_iters}
             )
             log.debug(f"Data: {time() - t_data:.4f} s")
 
-            t_infer = time()
+            t_encode = time()
+
             pats_t, cls_attns = encoder(ims)
             pats_t = pats_t.to(device)
 
-            # If lock on is used, override number of slots to match labels.
-            if lock_on:
-                # Get only first frame's labels and resize.
-                lbl = F.interpolate(lbls[:1], pats_t.shape[-2:])[0].to(device)
+            log.debug(f"Encode: {time() - t_encode:.4f} s")
 
+            masks: torch.Tensor = None  # type: ignore
+            if lock_on or use_bgfg:
                 # THW bitmask from `cls_attns` where True is background.
                 attn_bg = bg_from_attn(cls_attns)
 
-                # Get extra foreground objects not included in lbl.
-                extra = lbl[0].logical_xor(attn_bg[0]).logical_and(lbl[0])
+                # If lock on is used, override number of slots to match labels.
+                if lock_on:
+                    # Get only first frame's labels and resize.
+                    lbl = F.interpolate(lbls[:1], pats_t.shape[-2:])[0].to(device)
 
-                # Calculate slot masks for first frame labels.
-                mask, num_slots = calc_lock_on_masks(
-                    lbl[0], num_bslots, lbl[1:], num_cslots, extra, num_eslots
-                )
-                num_slots = num_slots if use_bgfg else sum(num_slots)
+                    # Get extra foreground objects not included in lbl.
+                    extra = lbl[0].logical_xor(attn_bg[0]).logical_and(lbl[0])
 
-                # Create mask.
-                masks = torch.ones(len(pats_t), *mask.shape).bool()
+                    # Calculate slot masks for first frame labels.
+                    mask, num_slots = calc_lock_on_masks(
+                        lbl[0], num_bslots, lbl[1:], num_cslots, extra, num_eslots
+                    )
+                    num_slots = num_slots if use_bgfg else sum(num_slots)
 
-                # Use `cls_attns` to restrict background slots from foreground.
-                # But don't restrict foreground slots since imperfect.
-                masks[:, :num_bslots] = E.rearrange(attn_bg, "t h w -> t 1 (h w)")
+                    # Create mask.
+                    masks = torch.ones(len(pats_t), *mask.shape).bool()
 
-                # Set first frame masks based on first frame labels.
-                masks[0] = mask
-            else:
-                masks = None
+                    # Use `cls_attns` to restrict background slots from foreground.
+                    # But don't restrict foreground slots since imperfect.
+                    masks[:, :num_bslots] = E.rearrange(attn_bg, "t h w -> t 1 (h w)")
+
+                    # Set first frame masks based on first frame labels.
+                    masks[0] = mask
+
+                elif use_bgfg:
+                    N = pats_t.size(-1) * pats_t.size(-2)
+                    masks = torch.ones(len(pats_t), sum(num_slots), N).bool()
+                    masks[:, : num_slots[0]] = E.rearrange(
+                        attn_bg, "t h w -> t 1 (h w)"
+                    )
+
+                masks = masks.to(device)
+
+            if not lock_on:
                 # Was black which is hard to see.
                 colors[0] = torch.Tensor([191, 128, 64])
+
+            log.debug(f"Num Slots: {num_slots}")
+
+            t_infer = time()
 
             preds = infer_slot_labels(
                 model,

@@ -70,6 +70,8 @@ class TensorCache:
         disk_pickle_protocol=HIGHEST_PROTOCOL,
     )
 
+    VID_LEVEL_CACHE = True
+
     def __init__(
         self,
         model_hash: str,
@@ -106,6 +108,12 @@ class TensorCache:
         self, vid: torch.Tensor
     ) -> Tuple[List[str | None], Dict[str, torch.Tensor] | None]:
         """Cache video on frame-level."""
+        if self.VID_LEVEL_CACHE:
+            vid_hash = hash_tensor(vid)
+            out = {a: self.get_val(vid_hash, a) for a in self.attrs}
+            miss = None in out.values()
+            return [vid_hash if miss else None], None if miss else out  # type: ignore
+
         hashes, out_t = [], []
         for im in vid:
             im_hash = hash_tensor(im)
@@ -133,7 +141,15 @@ class TensorCache:
         Returns:
             Dict[str, torch.Tensor | None]: Hashes and images not in cache.
         """
-        results = {}
+        results: dict = {}
+
+        if self.VID_LEVEL_CACHE:
+            vid_hash = hash_tensor(vid)
+            found = all(vid_hash in self.cache[attr] for attr in self.attrs)
+            if not found:
+                results[vid_hash] = vid
+            return results
+
         for im in vid:
             im_hash = hash_tensor(im)
             found = all(im_hash in self.cache[attr] for attr in self.attrs)

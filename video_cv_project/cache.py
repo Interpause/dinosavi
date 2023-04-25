@@ -58,11 +58,16 @@ def cache(cfg: DictConfig):
         cfg.vid_cache.model_hash = model_hash
     log.info(f"ViTModel Hash: {model_hash}")
 
-    model = max_compile(model, batch_size, device) if compile else model
-    model.to(device).eval()
-
     cache = instantiate(cfg.vid_cache, _convert_="all")
     log.info(f"Tensor Cache: {cache}")
+
+    in_size = (
+        batch_size * cfg.data.dataset.frames_per_clip
+        if cache.VID_LEVEL_CACHE
+        else batch_size
+    )
+    model = max_compile(model, in_size, device) if compile else model
+    model.to(device).eval()
 
     log.debug("Create Train Dataloader.")
     dataloader = create_kinetics_dataloader(cfg)
@@ -74,7 +79,7 @@ def cache(cfg: DictConfig):
         dataloader, epochs, logger=log, log_every=log_every, save_every=-1
     )
 
-    num_writers = cfg.data.num_workers  # type(cache).SETTINGS["shards"]
+    num_writers = cfg.num_writers  # type(cache).SETTINGS["shards"]
     semaphore = BoundedSemaphore(num_writers)
     log.info(f"Dataset Shards/Num Concurrent Writers: {num_writers}")
 
@@ -100,7 +105,10 @@ def cache(cfg: DictConfig):
                     hashes.append(im_hash)
                     ims.append(im)
 
-                batch = torch.stack(ims).to(device)
+                if cache.VID_LEVEL_CACHE:
+                    batch = torch.cat(ims).to(device)
+                else:
+                    batch = torch.stack(ims).to(device)
                 h, w = np.array(batch.shape[-2:]) // patch_size
 
                 # Tuple of last_hidden_state, pooler_output, hidden_states, attentions.
@@ -116,6 +124,12 @@ def cache(cfg: DictConfig):
                 attns_t = E.rearrange(
                     attns_t[:, :, 0, 1:], "t n (h w) -> t n h w", h=h, w=w
                 )
+
+                if cache.VID_LEVEL_CACHE:
+                    pats_t = E.rearrange(pats_t, "(b t) c h w -> b t c h w", b=len(ims))
+                    attns_t = E.rearrange(
+                        attns_t, "(b t) n h w -> b t n h w", b=len(ims)
+                    )
 
                 # Prevent memory leak.
                 if not semaphore.acquire(block=False):

@@ -282,6 +282,8 @@ class PatchAndViT(nn.Module):
         # TNPQ, where N is heads, P is each token, and Q are weights.
         attns = output.attentions[-1]
         attns = E.rearrange(attns, "t n (h w) -> t n h w", h=h, w=w)
+        if self.cache.VID_LEVEL_CACHE:
+            pats, attns = pats.unsqueeze(0), attns.unsqueeze(0)
         self.cache.put_vid(key, {CACHE_PATCHES: pats, CACHE_LAST_ATTNS: attns})
         return pats.to(ori_device), attns.to(ori_device)
 

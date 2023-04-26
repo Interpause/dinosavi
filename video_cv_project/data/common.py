@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as F
 from PIL import Image
+from torch.nn.functional import one_hot
 
 from video_cv_project.cfg import RGB
 
@@ -42,8 +43,9 @@ def labels_to_tensor(ims: Sequence[Image.Image]):
 
     # `lbls` is THW.
     if pal:
-        cls: torch.Tensor = E.rearrange(lbls.unique(), "n -> n 1 1")
-        lbls = cls == E.repeat(lbls, "t h w -> t n h w", n=len(cls))
+        # cls: torch.Tensor = E.rearrange(lbls.unique(), "n -> n 1 1")
+        # lbls = cls == E.repeat(lbls, "t h w -> t n h w", n=len(cls))
+        lbls = E.rearrange(one_hot(lbls), "t h w n -> t n h w")
         colors = E.rearrange(torch.tensor(pal), "(n c) -> n c", c=RGB)
 
     # `lbls` is THWC.

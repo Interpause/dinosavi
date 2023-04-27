@@ -25,6 +25,8 @@ lock_on: ${hparam.eval.lock_on.enable}
 slots_per_class: ${hparam.eval.lock_on.slots_per_class}
 # [Lock on only] Number of slots to use for background.
 num_bg_slots: ${hparam.eval.lock_on.num_bg_slots}
+# [Lock on only] Number of slots for unlabelled foreground objects.
+num_extra_slots: ${hparam.eval.lock_on.num_extra_slots}
 
 # Whether to rearrange slots by "overlap" or "slotsim".
 track_mode: null

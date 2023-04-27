@@ -57,7 +57,7 @@ def eval(cfg: DictConfig):
     num_slots = model.num_slots if cfg.num_slots is None else cfg.num_slots
     num_bslots = cfg.num_bg_slots
     num_cslots = cfg.slots_per_class
-    num_eslots = 2
+    num_eslots = cfg.num_extra_slots
     use_bgfg = not isinstance(num_slots, int)
     num_iters = model.num_iters if cfg.num_iters is None else cfg.num_iters
     ini_iters = model.ini_iters if cfg.ini_iters is None else cfg.ini_iters

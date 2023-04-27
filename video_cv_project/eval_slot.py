@@ -119,12 +119,23 @@ Ini Iters: {ini_iters}
                     # Get only first frame's labels and resize.
                     lbl = F.interpolate(lbls[:1], pats_t.shape[-2:])[0].to(device)
 
+                    # Since label might contain classes that aren't present, get index
+                    # of only the present classes.
+                    idx = E.reduce(lbl, "n h w -> n", "max").nonzero(as_tuple=True)[0]
+                    # Ensure background is always included even if not present.
+                    idx = torch.cat([torch.tensor([0]), idx[idx != 0]])
+
+                    # NHW present classes (excluding background).
+                    fg = lbl[idx[idx != 0]]
+                    # HW background.
+                    bg = lbl[0]
+
                     # Get extra foreground objects not included in lbl.
-                    extra = lbl[0].logical_xor(attn_bg[0]).logical_and(lbl[0])
+                    extra = bg.logical_xor(attn_bg[0]).logical_and(bg)
 
                     # Calculate slot masks for first frame labels.
                     mask, num_slots = calc_lock_on_masks(
-                        lbl[0], num_bslots, lbl[1:], num_cslots, extra, num_eslots
+                        bg, num_bslots, fg, num_cslots, extra, num_eslots
                     )
                     num_slots = num_slots if use_bgfg else sum(num_slots)
 
@@ -169,10 +180,14 @@ Ini Iters: {ini_iters}
 
             # Map multiple slots back to specific class when using lock on.
             if lock_on:
-                # Comment below out to see what each slot is doing.
+                # Comment out to see what each slot is doing.
                 preds = preds_from_lock_on(preds, num_bslots, num_cslots, num_eslots)
                 # Flip order of preds to allow palette to be assigned to foreground slots.
-                # preds = preds[:, ::-1]
+                # preds = preds.flip([1])
+                preds2 = torch.zeros_like(
+                    E.repeat(lbl, "n h w -> t n h w", t=len(preds))
+                )
+                preds2[:, idx] = preds
 
             log.debug(f"Inference: {time() - t_infer:.4f} s")
 
@@ -181,7 +196,7 @@ Ini Iters: {ini_iters}
             dump_vos_preds(
                 save_dir,
                 meta["im_paths"],
-                preds.cpu(),
+                preds2.cpu(),
                 colors,
                 has_palette=has_palette,
                 blend_name=f"blends/{vid_names[i]}/%05d.jpg",

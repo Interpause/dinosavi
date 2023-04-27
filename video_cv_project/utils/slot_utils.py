@@ -134,9 +134,6 @@ def calc_lock_on_masks(
     Returns:
         Tuple[torch.Tensor, Tuple[int, int]]: *SN slot bitmasks, tuple of number of (background, foreground) slots.
     """
-    # TODO: For some datasets, not all class ids are present in label.
-    # Such class ids should not be assigned slots since these slots still
-    # compete.
     bg_lbl = E.repeat(bg, "... h w -> ... s (h w)", s=num_bg)
     fg_lbl = E.repeat(fg, "... c h w -> ... (c s) (h w)", s=num_fg)
     extra_lbl = E.repeat(extra, "... h w -> ... s (h w)", s=num_extra)

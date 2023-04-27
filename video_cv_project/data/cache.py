@@ -106,29 +106,29 @@ class TensorCache:
 
     def get_vid(
         self, vid: torch.Tensor
-    ) -> Tuple[List[str | None], Dict[str, torch.Tensor] | None]:
+    ) -> Tuple[List[str], Dict[str, torch.Tensor] | None]:
         """Cache video on frame-level."""
         if self.VID_LEVEL_CACHE:
             vid_hash = hash_tensor(vid)
             out = {a: self.get_val(vid_hash, a) for a in self.attrs}
             miss = None in out.values()
-            return [vid_hash if miss else None], None if miss else out  # type: ignore
+            return [vid_hash], None if miss else out  # type: ignore
 
-        hashes, out_t = [], []
+        hashes, out_t, miss = [], [], False
         for im in vid:
             im_hash = hash_tensor(im)
             out = {a: self.get_val(im_hash, a) for a in self.attrs}
-            hashes.append(im_hash if None in out.values() else None)
+            hashes.append(im_hash)
             out_t.append(out)
-        miss = any(isinstance(im_hash, str) for im_hash in hashes)
+            if None in out.values():
+                miss = True
         return hashes, None if miss else default_collate(out_t)
 
-    def put_vid(self, hashes: List[str | None], data: Dict[str, torch.Tensor]):
+    def put_vid(self, hashes: List[str], data: Dict[str, torch.Tensor]):
         """Cache video on frame-level."""
         for k, v in data.items():
             for i, im_hash in enumerate(hashes):
-                # If None, it is already in cache.
-                if im_hash is None:
+                if all(im_hash in c for c in self.cache.values()):
                     continue
                 self.put_val(im_hash, k, v[i])
 

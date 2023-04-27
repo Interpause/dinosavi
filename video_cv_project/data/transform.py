@@ -237,10 +237,14 @@ class PatchAndViT(nn.Module):
         ori_device = ims.device
         key, cached = self.cache.get_vid(ims)
         if cached is not None:
-            return (
-                cached[CACHE_PATCHES].to(ori_device),
-                cached[CACHE_LAST_ATTNS].to(ori_device),
-            )
+            pats, attns = cached[CACHE_PATCHES], cached[CACHE_LAST_ATTNS]
+            # Ignore likely invalid cache values & recompute.
+            if pats.dim() == 5 and pats.shape[0] == 1:
+                pass  # pats = pats[0]
+            if attns.dim() == 5 and attns.shape[0] == 1:
+                pass  # attns = attns[0]
+            if pats.dim() == 4 and attns.dim() == 4:
+                return (pats.to(ori_device), attns.to(ori_device))
 
         self._compile()
         ims = ims.requires_grad_(False)
@@ -283,8 +287,11 @@ class PatchAndViT(nn.Module):
         attns = output.attentions[-1]
         attns = E.rearrange(attns, "t n (h w) -> t n h w", h=h, w=w)
         if self.cache.VID_LEVEL_CACHE:
-            pats, attns = pats.unsqueeze(0), attns.unsqueeze(0)
-        self.cache.put_vid(key, {CACHE_PATCHES: pats, CACHE_LAST_ATTNS: attns})
+            self.cache.put_vid(
+                key, {CACHE_PATCHES: pats[None], CACHE_LAST_ATTNS: attns[None]}
+            )
+        else:
+            self.cache.put_vid(key, {CACHE_PATCHES: pats, CACHE_LAST_ATTNS: attns})
         return pats.to(ori_device), attns.to(ori_device)
 
     def __repr__(self):

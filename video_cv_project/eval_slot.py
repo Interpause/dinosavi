@@ -188,6 +188,7 @@ Ini Iters: {ini_iters}
                     E.repeat(lbl, "n h w -> t n h w", t=len(preds))
                 )
                 preds2[:, idx] = preds
+                preds = preds2
 
             log.debug(f"Inference: {time() - t_infer:.4f} s")
 
@@ -196,7 +197,7 @@ Ini Iters: {ini_iters}
             dump_vos_preds(
                 save_dir,
                 meta["im_paths"],
-                preds2.cpu(),
+                preds.cpu(),
                 colors,
                 has_palette=has_palette,
                 blend_name=f"blends/{vid_names[i]}/%05d.jpg",

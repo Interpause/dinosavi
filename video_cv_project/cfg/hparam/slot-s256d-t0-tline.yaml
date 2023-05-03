@@ -1,0 +1,6 @@
+defaults:
+  - slot-s256d
+
+future:
+  time_steps: 0
+  time_decoder: linear

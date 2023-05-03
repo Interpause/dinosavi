@@ -1,0 +1,18 @@
+defaults:
+  - slot-s256d
+
+general:
+  lr: 0.0002
+  clip_gradnorm: 0.05
+  epochs: 5
+
+future:
+  time_steps: [1]
+  time_decoder: null
+
+bgfg:
+  enable: true
+  strategy: always
+
+slot:
+  num_slots: [5, 5]

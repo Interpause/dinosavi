@@ -1,0 +1,5 @@
+defaults:
+  - slot-s256d-t01-tline
+
+decode:
+  pe_type: linear

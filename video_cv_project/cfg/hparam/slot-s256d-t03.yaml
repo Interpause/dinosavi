@@ -1,0 +1,6 @@
+defaults:
+  - slot-s256d
+
+future:
+  time_steps: [0, 3]
+  time_decoder: attn

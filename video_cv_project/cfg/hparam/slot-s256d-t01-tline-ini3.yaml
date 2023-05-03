@@ -1,0 +1,5 @@
+defaults:
+  - slot-s256d-t01-tline
+
+slot:
+  ini_iters: 3

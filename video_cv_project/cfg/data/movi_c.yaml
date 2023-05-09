@@ -1,4 +1,4 @@
-# Config for DAVIS dataloader.
+# Config for MOVi_C dataloader.
 
 defaults:
   - base
@@ -8,11 +8,10 @@ batch_size: null
 num_workers: 2
 
 dataset:
-  _target_: video_cv_project.data.DAVISDataset
-  root: /home/jovyan/downloads/DAVIS/
-  year: '2017'
-  split: val
-  quality: '480p'
+  _target_: video_cv_project.data.MOViDataset
+  root: /home/jovyan/workspaces/MOVi-PyTorch/out/
+  name: movi_c
+  split: validation
   im_size: -1
   context_len: 20
 

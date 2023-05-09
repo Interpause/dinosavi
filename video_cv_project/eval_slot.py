@@ -11,7 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
 
 from video_cv_project.cfg import BEST_DEVICE
-from video_cv_project.data import DAVISDataset, create_davis_dataloader
+from video_cv_project.data import create_eval_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds, infer_slot_labels
 from video_cv_project.utils import (
     bg_from_attn,
@@ -74,7 +74,7 @@ Ini Iters: {ini_iters}
     )
 
     log.debug("Create Eval Dataloader.")
-    dataloader = create_davis_dataloader(cfg, 1)
+    dataloader = create_eval_dataloader(cfg)
 
     log.debug("Create Encoder.")
     encoder = instantiate(cfg.data.transform.patch_func)
@@ -89,9 +89,9 @@ Ini Iters: {ini_iters}
 
     model.to(device).eval()
 
-    dataset: DAVISDataset = dataloader.dataset  # type: ignore
-    vid_names = dataset.videos
-    has_palette = dataset.has_palette
+    dataset = dataloader.dataset
+    vid_names = dataset.videos  # type: ignore
+    has_palette = dataset.has_palette  # type: ignore
 
     with torch.inference_mode():
         t_data, t_encode, t_infer, t_save = time(), 0.0, 0.0, 0.0

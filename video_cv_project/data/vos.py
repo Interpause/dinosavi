@@ -6,12 +6,16 @@ from typing import Callable, Sequence, Tuple
 
 import torch
 import torchvision.transforms.functional as F
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
+
+from video_cv_project.utils import seed_data
 
 from .common import images_to_tensor, labels_to_tensor, load_images
 
-__all__ = ["VOSDataset"]
+__all__ = ["VOSDataset", "create_eval_dataloader"]
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +99,27 @@ class VOSDataset(Dataset):
     def __len__(self):
         """Dataset length."""
         return len(self.im_dirs)
+
+
+def create_eval_dataloader(cfg: DictConfig, map_scale: int = 1) -> DataLoader:
+    """Create dataloader for eval dataset."""
+    assert getattr(cfg.data.dataloader, "batch_size", None) is None
+    transform = instantiate(cfg.data.transform.pipeline, _convert_="all")
+    log.info(f"Pipeline:\n{transform}")
+
+    dataset = instantiate(
+        cfg.data.dataset, map_scale=map_scale, transform=transform, _convert_="all"
+    )
+    sampler = instantiate(cfg.data.sampler, data_source=dataset, _convert_="all")
+    dataloader = instantiate(
+        cfg.data.dataloader,
+        dataset=dataset,
+        sampler=sampler,
+        batch_size=None,
+        _convert_="all",
+        **seed_data(),
+    )
+    return dataloader
 
 
 # COCO color palette seems okay. Needed for unsupervised task unless you like looking at blank masks.

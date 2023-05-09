@@ -8,7 +8,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from video_cv_project.cfg import BEST_DEVICE
-from video_cv_project.data import DAVISDataset, create_davis_dataloader
+from video_cv_project.data import create_eval_dataloader
 from video_cv_project.engine import Checkpointer, dump_vos_preds, propagate_labels
 from video_cv_project.models import CRW
 from video_cv_project.utils import delete_layers, get_dirs, get_model_summary
@@ -35,7 +35,7 @@ def eval(cfg: DictConfig):
     log.info(f"Model scale: {model.map_scale}")
 
     log.debug("Create Eval Dataloader.")
-    dataloader = create_davis_dataloader(cfg, model.map_scale)
+    dataloader = create_eval_dataloader(cfg, model.map_scale)
 
     checkpointer = Checkpointer(model=model)
     resume_ckpt = root_dir / cfg.resume
@@ -46,9 +46,9 @@ def eval(cfg: DictConfig):
 
     encoder.to(device).eval()
 
-    dataset: DAVISDataset = dataloader.dataset  # type: ignore
-    vid_names = dataset.videos
-    has_palette = dataset.has_palette
+    dataset = dataloader.dataset
+    vid_names = dataset.videos  # type: ignore
+    has_palette = dataset.has_palette  # type: ignore
 
     with torch.inference_mode():
         t_data, t_infer, t_save = time(), 0.0, 0.0

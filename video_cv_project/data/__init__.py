@@ -2,4 +2,5 @@
 
 from .davis import *
 from .kinetics import *
+from .movi import *
 from .vos import *

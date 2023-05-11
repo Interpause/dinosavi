@@ -51,4 +51,4 @@ eval:
     enable: false
     slots_per_class: 1
     num_bg_slots: 5
-    num_extra_slots: 3
+    num_extra_slots: 0

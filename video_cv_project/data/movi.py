@@ -29,9 +29,9 @@ class MOViDataset(VOSDataset):
         lbl_dirs = []
 
         r = Path(root).resolve() / name / split
-        videos = [p.name for p in (r / "rgb").glob("*") if p.is_dir()]
+        self.videos = [p.name for p in (r / "rgb").glob("*") if p.is_dir()]
 
-        for video in videos:
+        for video in self.videos:
             lbl_dir = r / "seg" / video
             im_dir = r / "rgb" / video
             im_paths = sorted(im_dir.glob("*.jpg"), key=lambda p: int(p.stem))

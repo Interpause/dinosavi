@@ -33,18 +33,18 @@ train:
   clip_gradnorm: ${hparam.general.clip_gradnorm}
 
 data:
-  # cache_path: /home/jovyan/downloads/kinetics400-train.pt
+  cache_path: /home/jovyan/downloads/kinetics400-train.pt
   batch_size: ${hparam.general.batch_size}
-  num_workers: 16
+  num_workers: 32
   clips_per_vid: ${hparam.general.epochs}
   dataset:
     frame_rate: ${hparam.general.framerate}
     frames_per_clip: ${hparam.general.frames_per_clip}
     step_between_clips: ${.frames_per_clip}
-    # split: train
+    split: train
 
   transform:
     patch_func:
       # Done on CPU, cannot use too high batch size.
       device: cpu
-      batch_size: 2
+      batch_size: 1

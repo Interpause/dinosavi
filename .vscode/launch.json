@@ -10,9 +10,21 @@
       "request": "launch",
       "module": "video_cv_project",
       "justMyCode": true,
-      "args": ["mode=eval", "resume=latest.ckpt"],
-      // "args": ["mode=train"],
+      // "args": ["mode=eval", "resume=latest.ckpt"],
+      // "args": [
+      //   "mode=eval-slot",
+      //   "resume=/home/jovyan/workspaces/video-cv-project/outputs/slot_poc_6/2023-04-05_03-08-06/weights/epoch1_2000.ckpt"
+      // ],
+      // "args": ["mode=train-slot"],
       // "args": ["mode=cache"],
+      "args": [
+        "mode=eval",
+        "model=dinosaur",
+        "device=cpu",
+        "exp_name=test",
+        "ini_iters=3",
+        "resume=outputs/dinosaur/2023-04-18_07-34-36/weights/epoch1_25000.ckpt"
+      ],
       "env": {
         "CUDA_LAUNCH_BLOCKING": "1"
       }

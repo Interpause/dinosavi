@@ -2,11 +2,13 @@
 
 > Self-supervised learning of Video Object Segmentation using DINOSAUR and SAVi
 
+![slot-s256d-line-t01-tline-ini5](https://github.com/Interpause/dinosavi/assets/42513874/625d61a7-6f5f-4f43-aa4d-f11d812eef43)
+
 Currently, results are being consolidated and a paper is in progress. For now, enjoy the source code.
 
 Presentation Slides: <https://1drv.ms/p/s!AgE9E4ZerfvahsdfaYUe8caynzF0iw>
 
-Models: Will be uploaded later.
+Models: <https://1drv.ms/f/s!AgE9E4Zerfvahsd8TTjyDmHvikwY6g?e=o2n7EY>
 
 **Note**: <https://hydra.cc/> is used to manage configuration, CLI and experiment running. See <https://hydra.cc/docs/advanced/override_grammar/basic/> for CLI override grammar. Jump to [Codebase Notes](#codebase-notes) for more info.
 

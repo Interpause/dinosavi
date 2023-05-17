@@ -1,0 +1,21 @@
+# Config for CRW model.
+
+_target_: dinosavi.models.CRW
+encoder:
+  _target_: dinosavi.models.encoders.EncoderWithGRU
+  # TODO: How to load CRW pretrained models here?
+  encoder:
+    _target_: dinosavi.models.encoders.create_resnet_encoder
+    name: resnet18
+    weights: null
+    # del_layers: [layer4]
+  hid_dim: 256
+  size: 3
+  depth: 1
+  device: ${..device}
+edge_dropout: 0.0
+feat_dropout: 0.0
+temperature: 0.05
+head_depth: 1
+num_feats: 128
+device: ${device}

@@ -1,0 +1,18 @@
+# Main config file for dinosavi.
+
+defaults:
+  - _self_
+  - hydra: custom
+  - data:
+  - model:
+  - hparam:
+  - mode: help
+
+exp_name: exp
+
+# Path (absolute or relative) to the model.
+# For example: outputs/exp_2020-01-01_00-00-00/weights/latest.ckpt
+resume:
+device:
+
+verbose: [dinosavi]

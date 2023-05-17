@@ -1,0 +1,38 @@
+# Config for SlotTrainer.
+
+_target_: dinosavi.models.SlotTrainer
+time_steps: ${hparam.future.time_steps}
+num_slots: ${hparam.slot.num_slots}
+num_iters: ${hparam.slot.num_iters}
+ini_iters: ${hparam.slot.ini_iters}
+use_bgfg_groups: ${hparam.bgfg.enable}
+bgfg_strategy: ${hparam.bgfg.strategy}
+time_decoder: ${hparam.future.time_decoder}
+
+model:
+  _target_: dinosavi.models.SlotModel
+  slot_dim: ${hparam.slot.slot_dim}
+  slot_hid_dim: ${hparam.slot.hid_dim}
+  use_bgfg_groups: ${..use_bgfg_groups}
+  enc_cfg:
+    _target_: transformers.ViTConfig.from_pretrained
+    pretrained_model_name_or_path: ${vit_path}
+  slot_predictor:
+    _target_: dinosavi.models.SAViSlotPredictor
+    slot_dim: ${..slot_dim}
+    # Since these handle interactions between slots & predicts the next time step,
+    # each head could theoretically handle a different aspect to update. For example,
+    # changes in apperance, position, visibility, etc.
+    num_heads: 4
+
+decoder:
+  _target_: dinosavi.models.heads.AlphaSlotDecoder
+  slot_dim: ${..model.slot_dim}
+  # Should match dims of model.encoder's output feature map.
+  out_dim: ${hparam.general.out_dim}
+  depth: ${hparam.decode.depth}
+  kernel_size: ${hparam.decode.kernel_size}
+  hid_dim: ${hparam.decode.hid_dim}
+  pe_type: ${hparam.decode.pe_type}
+  # Decoder handles positional encoding interpolation.
+  pe_size: ${hparam.decode.pe_size}

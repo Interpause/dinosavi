@@ -8,12 +8,12 @@
       "name": "Python: Module",
       "type": "python",
       "request": "launch",
-      "module": "video_cv_project",
+      "module": "dinosavi",
       "justMyCode": true,
       // "args": ["mode=eval", "resume=latest.ckpt"],
       // "args": [
       //   "mode=eval-slot",
-      //   "resume=/home/jovyan/workspaces/video-cv-project/outputs/slot_poc_6/2023-04-05_03-08-06/weights/epoch1_2000.ckpt"
+      //   "resume=outputs/slot_poc_6/2023-04-05_03-08-06/weights/epoch1_2000.ckpt"
       // ],
       // "args": ["mode=train-slot"],
       // "args": ["mode=cache"],

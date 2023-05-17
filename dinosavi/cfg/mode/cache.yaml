@@ -1,0 +1,54 @@
+# @package _global_
+# Config for cache mode.
+
+defaults:
+  - slot-base
+  - override /data: kinetics400
+  - override /data/transform: base
+  - override /model: none
+
+mode: cache
+
+model:
+  _target_: dinosavi.models.encoders.ViTLastAttnModel.from_pretrained
+  pretrained_model_name_or_path: ${vit_path}
+  add_pooling_layer: false
+  output_attentions: true
+  return_dict: false
+  torchscript: true
+
+compile: true
+epochs: 1
+log_every: -1
+
+batch_size: 64
+num_writers: 256
+
+sampler:
+  _target_: torchvision.datasets.samplers.UniformClipSampler
+  # Kinetics400 videos are ~10s each. At 8 fps, each video has ~80 frames.
+  num_clips_per_video: 11
+
+vid_cache:
+  _target_: dinosavi.data.cache.TensorCache
+  cache_dir: ${cache_dir}
+
+data:
+  cache_path: ${hydra:runtime.cwd}/datasets/kinetics400-train.pt
+  batch_size: ${.num_workers}
+  num_workers: 16
+  dataset:
+    # Ensure every frame is cached.
+    frames_per_clip: 8 # 16
+    step_between_clips: ${.frames_per_clip}
+    split: train
+
+  transform:
+    # Workaround for config merge.
+    patch_func: ${vid_cache}
+
+  # Workaround for config merge.
+  sampler: ${sampler}
+
+  dataloader:
+    prefetch_factor: 8

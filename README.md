@@ -1,31 +1,41 @@
-# video-cv-project
+# DINOSAVi
 
-> Come up with name later
+> Self-supervised learning of Video Object Segmentation using DINOSAUR and SAVi
 
-**Note**: <https://hydra.cc/> is used as the config system, see <https://hydra.cc/docs/advanced/override_grammar/basic/> for CLI overrides.
+Currently, results are being consolidated and a paper is in progress. For now, enjoy the source code.
+
+Presentation Slides: <https://1drv.ms/p/s!AgE9E4ZerfvahsdfaYUe8caynzF0iw>
+
+Models: Will be uploaded later.
+
+**Note**: <https://hydra.cc/> is used to manage configuration, CLI and experiment running. See <https://hydra.cc/docs/advanced/override_grammar/basic/> for CLI override grammar. Jump to [Codebase Notes](#codebase-notes) for more info.
 
 ## Installation
 
 ```sh
+# (Optional) Use conda for virtual environment instead. Poetry creates venv by default.
+conda create -n dinosavi python=3.10
 poetry install
 ```
 
 ## Training
 
 ```sh
-python -m video_cv_project mode=train hparam=... exp_name=...
+python -m dinosavi mode=train hparam={hparam_file_name} exp_name={experiment_name}
 ```
 
 ## Evaluation
 
 ```sh
-python -m video_cv_project mode=eval resume=... exp_name=...
+python -m dinosavi mode=eval resume={.ckpt_to_load} exp_name={results_name} device={cpu_or_cuda}
 ```
 
-## Packaging
+## Codebase Notes
 
-- See <https://python-poetry.org/docs/pyproject/#extras> for adding `pip install package[extra]` support to built package.
-
-## Style Guide
-
-- We use [Black](https://github.com/psf/black) and [isort](https://github.com/PyCQA/isort).
+- [Hydra](https://hydra.cc/) (built on [OmegaConf](https://omegaconf.readthedocs.io/)) is used for configuration management, CLI and experiment running.
+  - For CLI options, you can temporarily refer to [`dinosavi/cfg/main.yaml`](dinosavi/cfg/main.yaml) and [`dinosavi/cfg/mode`](dinosavi/cfg/mode/) for now. Proper CLI documentation is in progress.
+  - Hyperparameter config files are stored in [`dinosavi/cfg/hparam`](dinosavi/cfg/hparam/).
+    - [OmegaConf Variable Interpolation](https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#variable-interpolation) is heavily used to link hyperparameter values into relevant config files.
+  - Many parts of the code (i.e., models, datasets, trainers) are implemented as config files using [Hydra's Instantiate API](https://hydra.cc/docs/advanced/instantiate_objects/overview/).
+- We use [Black](https://github.com/psf/black) for formatting, [isort](https://github.com/PyCQA/isort) for import sorting, and Google-style docstrings.
+- Anything to do with [Contrastive Random Walk](https://ajabri.github.io/videowalk/) (CRW) is leftover legacy code from earlier experiments.

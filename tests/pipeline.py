@@ -6,11 +6,11 @@ Can also output image patches for user to understand if its working.
 import torchvision.transforms.functional as F
 from PIL import Image
 
-from video_cv_project.cfg import RGB
+from dinosavi.cfg import RGB
 
 
 def _test(im_path: str, pipeline):
-    # NOTE: `video_cv_project.data.transform.create_pipeline` has flag ``do_rgb_norm```
+    # NOTE: `dinosavi.data.transform.create_pipeline` has flag ``do_rgb_norm```
     # which should be disabled for this.
     im = F.to_tensor(Image.open(im_path).convert("RGB"))
     ims = pipeline([im])

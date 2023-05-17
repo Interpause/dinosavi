@@ -1,0 +1,19 @@
+# Config for MOVi_C dataloader.
+
+defaults:
+  - base
+  - override transform: base
+
+batch_size: null
+num_workers: 2
+
+dataset:
+  _target_: dinosavi.data.MOViDataset
+  root: ${hydra:runtime.cwd}/datasets/movi
+  name: movi_c
+  split: validation
+  im_size: -1
+  context_len: 20
+
+sampler:
+  _target_: torch.utils.data.sampler.SequentialSampler

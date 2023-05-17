@@ -1,0 +1,28 @@
+# Config file for train pipeline.
+
+defaults:
+  # Base pipeline config.
+  - base
+
+im_size: [256, 256]
+# [384, 384]
+
+# NOTE: Augmentations are random per frame so some don't make sense.
+
+im_transforms:
+  - _target_: torchvision.transforms.ToPILImage
+  - _target_: torchvision.transforms.Resize
+    size: ${...im_size}
+    antialias: true
+  # - _target_: torchvision.transforms.ColorJitter
+  #   brightness: 0.05
+  #   contrast: 0.05
+  #   saturation: 0
+  #   hue: 0
+
+patch_func:
+  _target_: dinosavi.data.transform.PatchAndJitter
+  size: 64
+  stride: 32
+  scale: [0.7, 0.9]
+  ratio: [0.8, 1.2]

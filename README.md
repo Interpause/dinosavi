@@ -2,13 +2,11 @@
 
 > Self-supervised learning of Video Object Segmentation using DINOSAUR and SAVi
 
+**Presentation Slides**: <https://1drv.ms/p/s!AgE9E4ZerfvahsdfaYUe8caynzF0iw>
+
 ![slot-s256d-line-t01-tline-ini5](https://github.com/Interpause/dinosavi/assets/42513874/625d61a7-6f5f-4f43-aa4d-f11d812eef43)
 
-Currently, results are being consolidated and a paper is in progress. For now, enjoy the source code.
-
-Presentation Slides: <https://1drv.ms/p/s!AgE9E4ZerfvahsdfaYUe8caynzF0iw>
-
-Models: <https://1drv.ms/f/s!AgE9E4Zerfvahsd8TTjyDmHvikwY6g?e=o2n7EY>
+Models: <https://1drv.ms/f/s!AgE9E4Zerfvahsd8TTjyDmHvikwY6g>
 
 **Note**: <https://hydra.cc/> is used to manage configuration, CLI and experiment running. See <https://hydra.cc/docs/advanced/override_grammar/basic/> for CLI override grammar. Jump to [Codebase Notes](#codebase-notes) for more info.
 
@@ -35,7 +33,7 @@ python -m dinosavi mode=eval resume={.ckpt_to_load} exp_name={results_name} devi
 ## Codebase Notes
 
 - [Hydra](https://hydra.cc/) (built on [OmegaConf](https://omegaconf.readthedocs.io/)) is used for configuration management, CLI and experiment running.
-  - For CLI options, you can temporarily refer to [`dinosavi/cfg/main.yaml`](dinosavi/cfg/main.yaml) and [`dinosavi/cfg/mode`](dinosavi/cfg/mode/) for now. Proper CLI documentation is in progress.
+  - For CLI options, you can refer to [`dinosavi/cfg/main.yaml`](dinosavi/cfg/main.yaml) and [`dinosavi/cfg/mode`](dinosavi/cfg/mode/).
   - Hyperparameter config files are stored in [`dinosavi/cfg/hparam`](dinosavi/cfg/hparam/).
     - [OmegaConf Variable Interpolation](https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#variable-interpolation) is heavily used to link hyperparameter values into relevant config files.
   - Many parts of the code (i.e., models, datasets, trainers) are implemented as config files using [Hydra's Instantiate API](https://hydra.cc/docs/advanced/instantiate_objects/overview/).

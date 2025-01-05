@@ -5,6 +5,7 @@
 **Presentation Slides**: <https://1drv.ms/p/s!AgE9E4ZerfvahsdfaYUe8caynzF0iw>
 
 ![slot-s256d-line-t01-tline-ini5](https://github.com/Interpause/dinosavi/assets/42513874/625d61a7-6f5f-4f43-aa4d-f11d812eef43)
+> VOS shown above is from `slot-s256d-line-t01-tline-ini5` model
 
 Models: <https://1drv.ms/f/s!AgE9E4Zerfvahsd8TTjyDmHvikwY6g>
 
